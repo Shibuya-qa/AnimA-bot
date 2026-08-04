@@ -46,33 +46,3 @@ async def start_handler(message: Message, command: CommandObject = None):
             reply_markup=main_menu(),
         )
 
-
-@router.message(F.text == "📖 Qo'llanma")
-async def guide_handler(message: Message):
-    text = (
-        "📖 <b>Qo'llanma</b>\n\n"
-        "1️⃣ Anime kodini yozing (masalan: <code>AOT01</code>)\n"
-        "2️⃣ Bot sizga animeni ma'lumotlari bilan birga yuboradi\n"
-        "3️⃣ <b>Yuklab olish</b> tugmasini bosib faylni oling\n\n"
-        "📌 Kodlarni kanalimizdan topishingiz mumkin!"
-    )
-    await message.answer(text, parse_mode="HTML")
-
-
-@router.message(F.text == "📢 Reklama")
-async def ads_handler(message: Message):
-    text = (
-        "📢 <b>Reklama</b>\n\n"
-        "Reklamani joylashtirish uchun admin bilan bog'laning:\n"
-        "👤 @admin_username\n\n"
-        "💰 Narxlar va shartlar admin bilan kelishiladi."
-    )
-    await message.answer(text, parse_mode="HTML")
-
-
-@router.message(F.text == "📱 Shorts")
-async def shorts_handler(message: Message):
-    await message.answer(
-        "📱 <b>Shorts</b> bo'limi tez orada ishga tushadi!",
-        parse_mode="HTML"
-    )

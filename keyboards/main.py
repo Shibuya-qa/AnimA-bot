@@ -4,15 +4,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
 def main_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    builder.row(KeyboardButton(text="🔍 Anime Izlash"))
-    builder.row(
-        KeyboardButton(text="🗂 Kabinet"),
-        KeyboardButton(text="📱 Shorts"),
-    )
-    builder.row(
-        KeyboardButton(text="📖 Qo'llanma"),
-        KeyboardButton(text="📢 Reklama"),
-    )
+    builder.row(KeyboardButton(text="🗂 Kabinet"))
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -55,6 +47,8 @@ def cabinet_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📜 Ko'rish tarixi", callback_data="cabinet:history"))
     builder.row(InlineKeyboardButton(text="❤️ Sevimlilar", callback_data="cabinet:favorites"))
+    builder.row(InlineKeyboardButton(text="📖 Qo'llanma", callback_data="cabinet:guide"))
+    builder.row(InlineKeyboardButton(text="📢 Reklama berish", callback_data="cabinet:reklama"))
     builder.row(InlineKeyboardButton(text="🔙 Orqaga", callback_data="cabinet:back"))
     return builder.as_markup()
 

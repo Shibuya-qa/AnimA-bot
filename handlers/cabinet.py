@@ -50,3 +50,31 @@ async def favorites_handler(callback: CallbackQuery):
 @router.callback_query(F.data == "cabinet:back")
 async def cabinet_back(callback: CallbackQuery):
     await callback.message.delete()
+
+
+@router.callback_query(F.data == "cabinet:guide")
+async def guide_handler(callback: CallbackQuery):
+    text = (
+        "📖 <b>Qo'llanma</b>\n\n"
+        "1️⃣ Anime kodini yozing (masalan: <code>AOT01</code>)\n"
+        "2️⃣ Bot sizga animeni ma'lumotlari bilan birga yuboradi\n"
+        "3️⃣ <b>Yuklab olish</b> tugmasini bosib faylni oling\n\n"
+        "📌 Kodlarni kanalimizdan topishingiz mumkin!"
+    )
+    from keyboards.main import cabinet_menu
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=cabinet_menu())
+
+
+@router.callback_query(F.data == "cabinet:reklama")
+async def reklama_handler(callback: CallbackQuery):
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    text = (
+        "📢 <b>Reklama berish</b>\n\n"
+        "Reklamani joylashtirish uchun quyidagi manzilga murojaat qiling:\n"
+        "👤 @Shoxrux_Daminov"
+    )
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="👤 @Shoxrux_Daminov", url="https://t.me/Shoxrux_Daminov"))
+    builder.row(InlineKeyboardButton(text="🔙 Orqaga", callback_data="cabinet:back"))
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
