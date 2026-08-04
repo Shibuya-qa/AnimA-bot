@@ -49,7 +49,14 @@ async def favorites_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "cabinet:back")
 async def cabinet_back(callback: CallbackQuery):
-    await callback.message.delete()
+    text = (
+        f"🗂 <b>Kabinet</b>\n\n"
+        f"👤 <b>{callback.from_user.full_name}</b>\n"
+        f"🆔 ID: <code>{callback.from_user.id}</code>\n"
+        f"🔗 Username: @{callback.from_user.username or 'yo\\'q'}\n\n"
+        f"Nima ko'rishni xohlaysiz?"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=cabinet_menu())
 
 
 @router.callback_query(F.data == "cabinet:guide")
