@@ -58,7 +58,8 @@ async def init_db():
         async with db.execute("PRAGMA table_info(users)") as cursor:
             cols = [row[1] for row in await cursor.fetchall()]
             if "last_active" not in cols:
-                await db.execute("ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                await db.execute("ALTER TABLE users ADD COLUMN last_active TIMESTAMP")
+                await db.execute("UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE last_active IS NULL")
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS anime_episodes (
