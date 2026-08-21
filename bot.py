@@ -9,6 +9,7 @@ from database.db import init_db
 from handlers import start, anime, cabinet, admin, subscription, channel
 from middlewares.subscription import SubscriptionMiddleware
 from middlewares.chat_type import PrivateChatOnlyMiddleware
+from middlewares.activity import ActivityMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
@@ -20,6 +21,8 @@ async def main():
 
     dp.message.middleware(PrivateChatOnlyMiddleware())
     dp.callback_query.middleware(PrivateChatOnlyMiddleware())
+    dp.message.middleware(ActivityMiddleware())
+    dp.callback_query.middleware(ActivityMiddleware())
     dp.message.middleware(SubscriptionMiddleware())
     dp.callback_query.middleware(SubscriptionMiddleware())
 

@@ -36,10 +36,58 @@ def catalog_keyboard(animes: list, offset: int, total: int) -> InlineKeyboardMar
     return builder.as_markup()
 
 
-def anime_actions(anime_id: int, is_fav: bool) -> InlineKeyboardMarkup:
+def anime_actions(
+    anime_id: int,
+    is_fav: bool,
+    active_ep: int = 1,
+    available_episodes: list[int] = None,
+    total_episodes: int = 1,
+    page: int = 0
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+
+    # Determine episode numbers to show
+    if available_episodes:
+        all_eps = available_episodes
+    else:
+        max_ep = max(total_episodes, active_ep, 1)
+        all_eps = list(range(1, max_ep + 1))
+
+    # Paginate episodes (9 episodes per page)
+    EPS_PER_PAGE = 9
+    total_pages = (len(all_eps) + EPS_PER_PAGE - 1) // EPS_PER_PAGE
+    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
+
+    page_eps = all_eps[page * EPS_PER_PAGE : (page + 1) * EPS_PER_PAGE]
+
+    # Create 3-item rows for episode buttons
+    row = []
+    for ep in page_eps:
+        if ep == active_ep:
+            btn_text = f"[📀] - {ep}"
+        else:
+            btn_text = f"{ep}"
+        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"ep:{anime_id}:{ep}:{page}"))
+        if len(row) == 3:
+            builder.row(*row)
+            row = []
+    if row:
+        builder.row(*row)
+
+    # Navigation row if pagination needed
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data=f"ep_page:{anime_id}:{active_ep}:{page - 1}"))
+    if total_pages > 1:
+        nav.append(InlineKeyboardButton(text="❌", callback_data="noop"))
+    if page + 1 < total_pages:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data=f"ep_page:{anime_id}:{active_ep}:{page + 1}"))
+    if nav:
+        builder.row(*nav)
+
     fav_text = "❤️ Sevimlilardan olib tashlash" if is_fav else "🤍 Sevimlilarga qo'shish"
-    builder.row(InlineKeyboardButton(text=fav_text, callback_data=f"fav:{anime_id}"))
+    builder.row(InlineKeyboardButton(text=fav_text, callback_data=f"fav:{anime_id}:{active_ep}:{page}"))
+
     return builder.as_markup()
 
 
@@ -58,6 +106,7 @@ def cabinet_menu() -> InlineKeyboardMarkup:
 def admin_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="➕ Anime qo'shish", callback_data="admin:add"))
+    builder.row(InlineKeyboardButton(text="🎬 Qism qo'shish", callback_data="admin:addep_select"))
     builder.row(InlineKeyboardButton(text="📋 Animeler ro'yxati", callback_data="admin:list:0"))
     builder.row(InlineKeyboardButton(text="📢 Obuna kanallar", callback_data="admin:subchannels"))
     builder.row(InlineKeyboardButton(text="📣 Broadcast kanallar", callback_data="admin:bchannels"))
@@ -109,6 +158,7 @@ def admin_anime_list(animes: list, offset: int, total: int) -> InlineKeyboardMar
 
 def admin_anime_detail(anime_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="🎬 Yangi qism qo'shish", callback_data=f"admin:addep:{anime_id}"))
     builder.row(InlineKeyboardButton(text="✏️ Tahrirlash", callback_data=f"admin:edit:{anime_id}"))
     builder.row(InlineKeyboardButton(text="📣 Qayta broadcast", callback_data=f"admin:rebroadcast:{anime_id}"))
     builder.row(InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"admin:delete:{anime_id}"))

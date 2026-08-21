@@ -50,8 +50,32 @@ async def init_db():
                 id INTEGER PRIMARY KEY,
                 username TEXT,
                 full_name TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        """)
+        # Ensure last_active column exists if database was created earlier
+        async with db.execute("PRAGMA table_info(users)") as cursor:
+            cols = [row[1] for row in await cursor.fetchall()]
+            if "last_active" not in cols:
+                await db.execute("ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS anime_episodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                anime_id INTEGER NOT NULL,
+                episode_number INTEGER NOT NULL,
+                file_id TEXT DEFAULT '',
+                source_message_id INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(anime_id, episode_number),
+                FOREIGN KEY(anime_id) REFERENCES animes(id) ON DELETE CASCADE
+            )
+        """)
+        # Migrate existing source_message_id to anime_episodes as episode 1
+        await db.execute("""
+            INSERT OR IGNORE INTO anime_episodes (anime_id, episode_number, source_message_id)
+            SELECT id, 1, source_message_id FROM animes WHERE source_message_id > 0
         """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_history (
@@ -142,7 +166,26 @@ async def count_animes() -> int:
 async def register_user(user_id: int, username: str, full_name: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT OR IGNORE INTO users (id, username, full_name) VALUES (?, ?, ?)",
+            """INSERT INTO users (id, username, full_name, last_active)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(id) DO UPDATE SET
+               username=excluded.username,
+               full_name=excluded.full_name,
+               last_active=CURRENT_TIMESTAMP""",
+            (user_id, username, full_name)
+        )
+        await db.commit()
+
+
+async def touch_user_activity(user_id: int, username: str = "", full_name: str = ""):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO users (id, username, full_name, last_active)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(id) DO UPDATE SET
+               last_active=CURRENT_TIMESTAMP,
+               username=CASE WHEN excluded.username != '' THEN excluded.username ELSE users.username END,
+               full_name=CASE WHEN excluded.full_name != '' THEN excluded.full_name ELSE users.full_name END""",
             (user_id, username, full_name)
         )
         await db.commit()
@@ -152,6 +195,74 @@ async def count_users() -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT COUNT(*) FROM users") as cursor:
             return (await cursor.fetchone())[0]
+
+
+async def get_active_users_stats() -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE last_active >= datetime('now', '-1 day')"
+        ) as c1:
+            u_24h = (await c1.fetchone())[0]
+
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE last_active >= datetime('now', '-7 days')"
+        ) as c2:
+            u_7d = (await c2.fetchone())[0]
+
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE last_active >= datetime('now', '-30 days')"
+        ) as c3:
+            u_30d = (await c3.fetchone())[0]
+
+        return {"24h": u_24h, "7d": u_7d, "30d": u_30d}
+
+
+# ─── ANIME EPISODES ──────────────────────────────────────────────────────────
+
+async def add_episode(anime_id: int, episode_number: int, file_id: str = "", source_message_id: int = 0) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT OR REPLACE INTO anime_episodes (anime_id, episode_number, file_id, source_message_id)
+               VALUES (?, ?, ?, ?)""",
+            (anime_id, episode_number, file_id, source_message_id)
+        )
+        # Update current_episode in animes table if needed
+        await db.execute(
+            """UPDATE animes SET current_episode = MAX(current_episode, ?)
+               WHERE id = ?""",
+            (episode_number, anime_id)
+        )
+        await db.commit()
+
+
+async def get_episodes(anime_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM anime_episodes WHERE anime_id = ? ORDER BY episode_number ASC",
+            (anime_id,)
+        ) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
+async def get_episode(anime_id: int, episode_number: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM anime_episodes WHERE anime_id = ? AND episode_number = ?",
+            (anime_id, episode_number)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
+async def delete_episode(anime_id: int, episode_number: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "DELETE FROM anime_episodes WHERE anime_id = ? AND episode_number = ?",
+            (anime_id, episode_number)
+        )
+        await db.commit()
 
 
 async def add_history(user_id: int, anime_id: int):

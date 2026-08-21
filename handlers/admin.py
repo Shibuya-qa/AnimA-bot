@@ -9,10 +9,11 @@ from aiogram.types import InlineKeyboardButton
 from config import ADMIN_IDS, ADMIN_PASSWORD, SOURCE_CHANNEL_ID
 from database.db import (
     add_anime, delete_anime, update_anime, list_animes, count_animes,
-    count_users, get_anime_by_code, get_anime_by_id,
+    count_users, get_active_users_stats, get_anime_by_code, get_anime_by_id,
     is_admin_in_db, add_admin, list_admins,
     get_sub_channels, add_sub_channel, delete_sub_channel,
     get_broadcast_channels, add_broadcast_channel, delete_broadcast_channel,
+    add_episode, get_episodes, get_episode, delete_episode,
 )
 from keyboards.main import (
     admin_menu, admin_anime_list, admin_anime_detail, admin_edit_fields,
@@ -39,6 +40,12 @@ class AddAnime(StatesGroup):
     genres = State()
     thumbnail = State()
     description = State()
+
+
+class AddEpisode(StatesGroup):
+    select_anime = State()
+    episode_number = State()
+    video_source = State()
 
 
 class EditField(StatesGroup):
@@ -97,13 +104,17 @@ async def admin_stats(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
     users = await count_users()
+    active_stats = await get_active_users_stats()
     animes = await count_animes()
     admins = await list_admins()
     bch = await get_broadcast_channels()
     admin_list = "\n".join(f"  • {a['full_name']}" for a in admins) or "  —"
     text = (
         f"📊 <b>Statistika</b>\n\n"
-        f"👤 Foydalanuvchilar: <b>{users}</b>\n"
+        f"👤 Jami foydalanuvchilar: <b>{users}</b>\n"
+        f"🔥 Aktiv (24 soat): <b>{active_stats['24h']}</b>\n"
+        f"⚡ Aktiv (7 kun): <b>{active_stats['7d']}</b>\n"
+        f"📅 Aktiv (30 kun): <b>{active_stats['30d']}</b>\n\n"
         f"🎬 Animeler: <b>{animes}</b>\n"
         f"📣 Broadcast kanallar: <b>{len(bch)}</b>\n\n"
         f"👑 Adminlar:\n{admin_list}"
@@ -335,6 +346,148 @@ async def add_description(message: Message, state: FSMContext):
             parse_mode="HTML",
             reply_markup=admin_menu()
         )
+
+
+# ─── ADD EPISODE FSM ─────────────────────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:addep_select")
+async def admin_addep_select_start(callback: CallbackQuery, state: FSMContext):
+    if not await check_admin(callback.from_user.id):
+        return
+    await state.set_state(AddEpisode.select_anime)
+    await callback.message.answer(
+        "🎬 <b>Qaysi animega qism qo'shmoqchisiz?</b>\n\n"
+        "Anime kodini kiriting (masalan: <code>81</code>):",
+        parse_mode="HTML"
+    )
+
+
+@router.message(AddEpisode.select_anime)
+async def addep_select_code(message: Message, state: FSMContext):
+    code = message.text.strip()
+    anime = await get_anime_by_code(code)
+    if not anime:
+        await message.answer("❌ Bunday kodli anime topilmadi! Qayta kiriting:")
+        return
+    await start_add_episode_for_anime(message, state, anime)
+
+
+@router.callback_query(F.data.startswith("admin:addep:"))
+async def admin_addep_for_id(callback: CallbackQuery, state: FSMContext):
+    if not await check_admin(callback.from_user.id):
+        return
+    anime_id = int(callback.data.split(":")[2])
+    anime = await get_anime_by_id(anime_id)
+    if not anime:
+        await callback.answer("Anime topilmadi", show_alert=True)
+        return
+    await start_add_episode_for_anime(callback.message, state, anime)
+
+
+async def start_add_episode_for_anime(target_msg: Message, state: FSMContext, anime: dict):
+    next_ep = anime.get("current_episode", 0) + 1
+    await state.update_data(anime_id=anime["id"], anime_name=anime["name"], anime_code=anime["code"])
+    await state.set_state(AddEpisode.episode_number)
+
+    b = InlineKeyboardBuilder()
+    b.row(InlineKeyboardButton(text=f"➕ {next_ep}-qismni qo'shish", callback_data=f"set_ep_num:{next_ep}"))
+
+    await target_msg.answer(
+        f"🎬 <b>{anime['name']}</b> (Kod: <code>{anime['code']}</code>)\n"
+        f"📺 Joriy qismlar: <b>{anime['current_episode']}/{anime['total_episodes']}</b>\n\n"
+        f"Qism raqamini kiriting yoki pastdagi tugmani bosing:",
+        parse_mode="HTML",
+        reply_markup=b.as_markup()
+    )
+
+
+@router.callback_query(F.data.startswith("set_ep_num:"), AddEpisode.episode_number)
+async def set_ep_num_cb(callback: CallbackQuery, state: FSMContext):
+    ep_num = int(callback.data.split(":")[1])
+    await state.update_data(episode_number=ep_num)
+    await state.set_state(AddEpisode.video_source)
+    await callback.message.edit_text(
+        f"📹 <b>{ep_num}-qism uchun videoni yuboring</b>\n\n"
+        f"• Videoni botga to'g'ridan-to'g'ri yuboring\n"
+        f"• Yoki manba kanaldagi post ID sini kiriting (masalan: <code>1234</code>):",
+        parse_mode="HTML"
+    )
+
+
+@router.message(AddEpisode.episode_number)
+async def set_ep_num_msg(message: Message, state: FSMContext):
+    try:
+        ep_num = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ Qism raqamini to'g'ri kiriting (masalan: 4):")
+        return
+    await state.update_data(episode_number=ep_num)
+    await state.set_state(AddEpisode.video_source)
+    await message.answer(
+        f"📹 <b>{ep_num}-qism uchun videoni yuboring</b>\n\n"
+        f"• Videoni botga to'g'ridan-to'g'ri yuboring\n"
+        f"• Yoki manba kanaldagi post ID sini kiriting (masalan: <code>1234</code>):",
+        parse_mode="HTML"
+    )
+
+
+@router.message(AddEpisode.video_source, F.video)
+async def save_ep_video(message: Message, state: FSMContext):
+    data = await state.get_data()
+    file_id = message.video.file_id
+    await add_episode(
+        anime_id=data["anime_id"],
+        episode_number=data["episode_number"],
+        file_id=file_id,
+        source_message_id=0
+    )
+    await state.clear()
+    await message.answer(
+        f"✅ <b>{data['anime_name']} — {data['episode_number']}-qism qo'shildi!</b>",
+        parse_mode="HTML",
+        reply_markup=admin_menu()
+    )
+
+
+@router.message(AddEpisode.video_source, F.document)
+async def save_ep_document(message: Message, state: FSMContext):
+    data = await state.get_data()
+    file_id = message.document.file_id
+    await add_episode(
+        anime_id=data["anime_id"],
+        episode_number=data["episode_number"],
+        file_id=file_id,
+        source_message_id=0
+    )
+    await state.clear()
+    await message.answer(
+        f"✅ <b>{data['anime_name']} — {data['episode_number']}-qism qo'shildi!</b>",
+        parse_mode="HTML",
+        reply_markup=admin_menu()
+    )
+
+
+@router.message(AddEpisode.video_source, F.text)
+async def save_ep_msg_id(message: Message, state: FSMContext):
+    data = await state.get_data()
+    try:
+        msg_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ Kanal post ID sini raqam sifatida kiriting yoki video fayl yuboring!")
+        return
+
+    await add_episode(
+        anime_id=data["anime_id"],
+        episode_number=data["episode_number"],
+        file_id="",
+        source_message_id=msg_id
+    )
+    await state.clear()
+    await message.answer(
+        f"✅ <b>{data['anime_name']} — {data['episode_number']}-qism (Kanal post #{msg_id}) qo'shildi!</b>",
+        parse_mode="HTML",
+        reply_markup=admin_menu()
+    )
 
 
 # ─── EDIT FIELD ──────────────────────────────────────────────────────────────
