@@ -59,7 +59,14 @@ async def init_db():
             cols = [row[1] for row in await cursor.fetchall()]
             if "last_active" not in cols:
                 await db.execute("ALTER TABLE users ADD COLUMN last_active TIMESTAMP")
-                await db.execute("UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE last_active IS NULL")
+                await db.execute("UPDATE users SET last_active = created_at WHERE last_active IS NULL")
+            
+            # Reset last_active to created_at for legacy users migrated with system timestamp
+            await db.execute(
+                """UPDATE users SET last_active = created_at 
+                   WHERE last_active IS NULL 
+                      OR (last_active >= datetime('now', '-30 minutes') AND created_at < datetime('now', '-1 hour'))"""
+            )
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS anime_episodes (
