@@ -2,9 +2,11 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
 
-def main_menu() -> ReplyKeyboardMarkup:
+def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(KeyboardButton(text="🗂 Kabinet"))
+    if is_admin:
+        builder.row(KeyboardButton(text="👑 Admin Panel"))
     return builder.as_markup(resize_keyboard=True)
 
 

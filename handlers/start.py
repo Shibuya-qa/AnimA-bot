@@ -4,6 +4,7 @@ from aiogram.filters import CommandStart, CommandObject
 
 from database.db import register_user, get_anime_by_code
 from keyboards.main import main_menu, cabinet_menu
+from handlers.admin import check_admin
 
 router = Router()
 
@@ -32,17 +33,20 @@ async def start_handler(message: Message, command: CommandObject = None):
             await deliver_anime(message, anime)
             return
 
+    is_adm = await check_admin(message.from_user.id)
+    kb = main_menu(is_admin=is_adm)
+
     try:
         await message.answer_animation(
             animation=WELCOME_GIF,
             caption=WELCOME_TEXT,
             parse_mode="HTML",
-            reply_markup=main_menu(),
+            reply_markup=kb,
         )
     except Exception:
         await message.answer(
             text=WELCOME_TEXT,
             parse_mode="HTML",
-            reply_markup=main_menu(),
+            reply_markup=kb,
         )
 

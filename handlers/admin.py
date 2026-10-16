@@ -67,9 +67,10 @@ async def check_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS or await is_admin_in_db(user_id)
 
 
-# ─── /panel ──────────────────────────────────────────────────────────────────
+# ─── /panel & /admin ──────────────────────────────────────────────────────────
 
-@router.message(Command("panel"))
+@router.message(Command("panel", "admin"))
+@router.message(F.text.in_({"👑 Admin Panel", "Admin Panel", "admin", "panel"}))
 async def panel_handler(message: Message, state: FSMContext):
     if await check_admin(message.from_user.id):
         await message.answer("👑 <b>Admin Panel</b>", parse_mode="HTML", reply_markup=admin_menu())
@@ -80,7 +81,10 @@ async def panel_handler(message: Message, state: FSMContext):
 
 @router.message(PasswordState.waiting)
 async def password_check(message: Message, state: FSMContext):
-    await message.delete()
+    try:
+        await message.delete()
+    except Exception:
+        pass
     if message.text.strip() == ADMIN_PASSWORD:
         await add_admin(message.from_user.id, message.from_user.username or "", message.from_user.full_name or "")
         await state.clear()
