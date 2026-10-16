@@ -67,8 +67,10 @@ class SubscriptionMiddleware(BaseMiddleware):
         if not not_subscribed:
             return await handler(event, data)
 
+        user = event.from_user
+        mention = f"@{user.username}" if user.username else f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
         text = (
-            "⚠️ <b>Botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:</b>\n\n"
+            f"⚠️ <b>{mention}</b>, botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:\n\n"
             + "\n".join(f"• {ch['channel_name']}" for ch in not_subscribed)
         )
         kb = subscribe_keyboard(not_subscribed)

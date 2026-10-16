@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 import logging
 
 from database.db import (
@@ -7,47 +7,69 @@ from database.db import (
     add_history, add_favorite, remove_favorite, is_favorite,
     list_animes, count_animes,
     get_episodes, get_episode,
+    increment_anime_views, increment_anime_downloads,
+    search_animes, get_top_animes, get_random_anime,
+    rate_anime, get_user_rating,
+    get_all_genres, get_animes_by_genre, count_animes_by_genre,
 )
-from keyboards.main import anime_actions, search_menu, catalog_keyboard
+from keyboards.main import (
+    anime_actions, search_menu, catalog_keyboard,
+    genres_keyboard, search_results_keyboard, top_animes_keyboard,
+    rating_keyboard,
+)
 from config import SOURCE_CHANNEL_ID
 
 router = Router()
 log = logging.getLogger(__name__)
 
 IGNORED_TEXTS = {
-    "🔍 Anime Izlash", "🗂 Kabinet", "📱 Shorts", "📖 Qo'llanma", "📢 Reklama"
+    "🔍 Qidirish", "🔍 Anime Izlash", "🔥 Top Animelar", "🎲 Random Anime",
+    "🗂 Kabinet", "👑 Admin Panel", "Admin Panel", "📖 Qo'llanma",
+    "📢 Reklama", "📱 Shorts", "admin", "panel"
 }
 
 
 def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
     status = anime.get("status", "Nomalum")
+    status_emoji = "🟢" if status == "Tugallangan" else "🔄"
     total_ep = anime.get("total_episodes", 0)
     curr_total = anime.get("current_episode", 0)
+    views = anime.get("views", 0) or 0
+    downloads = anime.get("downloads", 0) or 0
+    rating = anime.get("rating", 5.0) or 5.0
+    rating_count = anime.get("rating_count", 0) or 0
 
     if status == "Tugallangan":
-        ep_line = f"├‣ Anime: {total_ep} ta qism"
+        ep_line = f"├‣ 📺 Qismlar: <b>{total_ep} ta qism</b>"
     else:
-        ep_line = f"├‣ Anime: {curr_total}/{total_ep} qism"
+        ep_line = f"├‣ 📺 Qismlar: <b>{curr_total}/{total_ep} qism</b>"
 
     lines = [
-        f"<b>{anime['name']}</b>",
-        "╭──────────────────────",
-        f"├‣ Status: {status}",
+        f"🎬 <b>{anime['name']}</b>",
+        "╭────────────────────────────",
+        f"├‣ 🔑 Kod: <code>{anime['code']}</code>",
+        f"├‣ {status_emoji} Holati: <b>{status}</b>",
         ep_line,
-        f"├‣ Tanlangan: <b>{current_ep_num}-qism</b>",
+        f"├‣ 📀 Tanlangan qism: <b>{current_ep_num}-qism</b>",
     ]
     if anime.get("translation"):
-        lines.append(f"├‣ Translation: {anime['translation']}")
+        lines.append(f"├‣ 🌐 Tarjima: <b>{anime['translation']}</b>")
     if anime.get("genres"):
-        lines.append(f"├‣ Genres: {anime['genres']}")
-    lines.append("╰──────────────────────")
+        lines.append(f"├‣ 🎭 Janrlar: <i>{anime['genres']}</i>")
+
+    lines.append("├────────────────────────────")
+    stars = "⭐" * int(min(5, max(1, round(rating))))
+    lines.append(f"├‣ 👁 Ko'rishlar: <b>{views:,}</b> | 📥 Yuklangan: <b>{downloads:,}</b>")
+    lines.append(f"├‣ {stars} Reyting: <b>{rating:.1f}/5.0</b> ({rating_count} ovoz)")
+    lines.append("╰────────────────────────────")
+
     if anime.get("description"):
-        lines.append(f"\n📄 {anime['description']}")
+        lines.append(f"\n📖 <b>Tavsif:</b>\n<i>{anime['description']}</i>")
     return "\n".join(lines)
 
 
 async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
-    """Deliver video for a specific episode."""
+    """Deliver video for a specific episode and increment download count."""
     ep_data = await get_episode(anime["id"], ep_num)
     file_id = ep_data.get("file_id") if ep_data else ""
     msg_id = ep_data.get("source_message_id") if ep_data else 0
@@ -56,9 +78,17 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     if not file_id and not msg_id and ep_num == 1:
         msg_id = anime.get("source_message_id", 0)
 
+    caption_text = f"🎬 <b>{anime['name']}</b> — {ep_num}-qism\n🔑 Kod: <code>{anime['code']}</code>"
+
     if file_id:
         try:
-            await bot.send_video(chat_id=chat_id, video=file_id, caption=f"🎬 <b>{anime['name']}</b> — {ep_num}-qism", parse_mode="HTML")
+            await bot.send_video(
+                chat_id=chat_id,
+                video=file_id,
+                caption=caption_text,
+                parse_mode="HTML"
+            )
+            await increment_anime_downloads(anime["id"])
             return
         except Exception as e:
             log.error(f"[ANIME] send_video file_id failed: {e}")
@@ -69,9 +99,10 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
                 chat_id=chat_id,
                 from_chat_id=SOURCE_CHANNEL_ID,
                 message_id=msg_id,
-                caption=f"🎬 <b>{anime['name']}</b> — {ep_num}-qism",
+                caption=caption_text,
                 parse_mode="HTML",
             )
+            await increment_anime_downloads(anime["id"])
             log.info(f"[ANIME] copy_message OK: ep={ep_num} msg_id={msg_id}")
             return
         except Exception as e:
@@ -95,6 +126,11 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = 1, page: in
     user_id = message.from_user.id
     is_fav = await is_favorite(user_id, anime["id"])
 
+    await increment_anime_views(anime["id"])
+    fresh_anime = await get_anime_by_id(anime["id"])
+    if fresh_anime:
+        anime = fresh_anime
+
     episodes = await get_episodes(anime["id"])
     available_eps = [e["episode_number"] for e in episodes] if episodes else []
 
@@ -105,15 +141,20 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = 1, page: in
         active_ep=ep_num,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
-        page=page
+        page=page,
+        anime_code=anime.get("code", ""),
     )
 
     await add_history(user_id, anime["id"])
 
     # Send info card
     if anime.get("thumbnail_file_id"):
-        await message.answer_photo(photo=anime["thumbnail_file_id"], caption=caption,
-                                   parse_mode="HTML", reply_markup=kb)
+        await message.answer_photo(
+            photo=anime["thumbnail_file_id"],
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=kb
+        )
     else:
         await message.answer(caption, parse_mode="HTML", reply_markup=kb)
 
@@ -143,7 +184,8 @@ async def episode_click_handler(callback: CallbackQuery):
         active_ep=ep_num,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
-        page=page
+        page=page,
+        anime_code=anime.get("code", ""),
     )
 
     try:
@@ -178,7 +220,8 @@ async def episode_page_handler(callback: CallbackQuery):
         active_ep=active_ep,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
-        page=page
+        page=page,
+        anime_code=anime.get("code", ""),
     )
 
     try:
@@ -191,27 +234,154 @@ async def episode_page_handler(callback: CallbackQuery):
     await callback.answer()
 
 
-# ─── SEARCH ──────────────────────────────────────────────────────────────────
+@router.callback_query(F.data.startswith("download_ep:"))
+async def download_ep_handler(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    anime_id, ep_num = int(parts[1]), int(parts[2])
+    anime = await get_anime_by_id(anime_id)
+    if not anime:
+        await callback.answer("Anime topilmadi", show_alert=True)
+        return
+    await callback.answer(f"📥 {ep_num}-qism yuborilmoqda...")
+    await send_episode_video(callback.bot, callback.message.chat.id, anime, ep_num)
 
-@router.message(F.text == "🔍 Anime Izlash")
-async def search_handler(message: Message):
+
+# ─── RATINGS ─────────────────────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("rate_menu:"))
+async def rate_menu_handler(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    anime_id, active_ep, page = int(parts[1]), int(parts[2]), int(parts[3])
+    await callback.message.edit_reply_markup(reply_markup=rating_keyboard(anime_id, active_ep, page))
+    await callback.answer("⭐ Baho bering (1 dan 5 gacha)")
+
+
+@router.callback_query(F.data.startswith("do_rate:"))
+async def do_rate_handler(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    anime_id, score, active_ep, page = int(parts[1]), int(parts[2]), int(parts[3]), int(parts[4])
+    result = await rate_anime(callback.from_user.id, anime_id, score)
+    await callback.answer(f"✅ Rahmat! Siz {score} ⭐ baho berdingiz. Yangi reyting: {result['rating']:.1f}", show_alert=True)
+    anime = await get_anime_by_id(anime_id)
+    if anime:
+        is_fav = await is_favorite(callback.from_user.id, anime_id)
+        episodes = await get_episodes(anime_id)
+        available_eps = [e["episode_number"] for e in episodes] if episodes else []
+        caption = format_anime_card(anime, active_ep)
+        kb = anime_actions(
+            anime_id=anime_id,
+            is_fav=is_fav,
+            active_ep=active_ep,
+            available_episodes=available_eps,
+            total_episodes=anime.get("total_episodes", 1),
+            page=page,
+            anime_code=anime.get("code", ""),
+        )
+        try:
+            if callback.message.caption:
+                await callback.message.edit_caption(caption=caption, parse_mode="HTML", reply_markup=kb)
+            else:
+                await callback.message.edit_text(text=caption, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+
+# ─── SEARCH / EXPLORE ────────────────────────────────────────────────────────
+
+@router.message(F.text.in_({"🔍 Qidirish", "🔍 Anime Izlash"}))
+async def search_menu_handler(message: Message):
     total = await count_animes()
-    await message.answer(
-        f"🔍 <b>Anime qidirish</b>\n\n"
+    text = (
+        f"🔍 <b>Anime Qidiruv Markazi</b>\n\n"
         f"📚 Bazada jami <b>{total}</b> ta anime mavjud.\n\n"
-        f"Kod bilsangiz — to'g'ridan-to'g'ri yuboring.\n"
-        f"Bilmasangiz — katalogdan tanlang:",
-        parse_mode="HTML",
-        reply_markup=search_menu()
+        f"✨ Qidirmoqchi bo'lgan anime <b>nomini</b> yoki <b>kodini</b> yozib yuboring.\n"
+        f"Misol: <code>81</code> yoki <code>Naruto</code>\n\n"
+        f"Yoki pastdagi tugmalar orqali kashf eting:"
     )
+    await message.answer(text, parse_mode="HTML", reply_markup=search_menu())
 
 
-@router.callback_query(F.data == "search:bycode")
-async def search_by_code_hint(callback: CallbackQuery):
+@router.message(F.text == "🔥 Top Animelar")
+@router.callback_query(F.data == "top_animes")
+async def top_animes_handler(event: Message | CallbackQuery):
+    top_list = await get_top_animes(limit=10)
+    if not top_list:
+        text = "📭 Hozircha animelar mavjud emas."
+        if isinstance(event, CallbackQuery):
+            await event.answer("Animelar yo'q", show_alert=True)
+        else:
+            await event.answer(text)
+        return
+
+    text = "🔥 <b>Eng mashhur TOP 10 Animelar:</b>\n\nTomosha qilish uchun birortasini tanlang:"
+    kb = top_animes_keyboard(top_list)
+    if isinstance(event, CallbackQuery):
+        await event.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+        await event.answer()
+    else:
+        await event.answer(text, parse_mode="HTML", reply_markup=kb)
+
+
+@router.message(F.text == "🎲 Random Anime")
+@router.callback_query(F.data == "random_anime")
+async def random_anime_handler(event: Message | CallbackQuery):
+    anime = await get_random_anime()
+    if not anime:
+        msg = "📭 Hozircha bazada anime mavjud emas."
+        if isinstance(event, CallbackQuery):
+            await event.answer(msg, show_alert=True)
+        else:
+            await event.answer(msg)
+        return
+
+    target_msg = event.message if isinstance(event, CallbackQuery) else event
+    if isinstance(event, CallbackQuery):
+        await event.answer("🎲 Siz uchun tasodifiy anime tanlandi!")
+    await deliver_anime(target_msg, anime)
+
+
+@router.callback_query(F.data == "genres:list")
+async def genres_list_handler(callback: CallbackQuery):
+    genres = await get_all_genres()
+    if not genres:
+        await callback.answer("Hozircha janrlar qo'shilmagan", show_alert=True)
+        return
+    text = "🎭 <b>Janrlar bo'yicha saralash:</b>\n\nO'zingizga yoqqan janrni tanlang:"
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=genres_keyboard(genres))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("genre:"))
+async def genre_animes_handler(callback: CallbackQuery):
+    parts = callback.data.split(":")
+    genre, offset = parts[1], int(parts[2])
+    animes = await get_animes_by_genre(genre, offset=offset, limit=8)
+    total = await count_animes_by_genre(genre)
+    if not animes:
+        await callback.answer("Bu janrda anime yo'q", show_alert=True)
+        return
+
+    page = offset // 8 + 1
+    total_pages = (total + 7) // 8
+    text = f"🎭 <b>{genre}</b> janridagi animelar — {page}/{total_pages} sahifa (jami {total} ta):"
     await callback.message.edit_text(
-        "✏️ Anime kodini yuboring (masalan: <code>81</code>):",
-        parse_mode="HTML"
+        text,
+        parse_mode="HTML",
+        reply_markup=catalog_keyboard(animes, offset, total, genre=genre)
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "search:menu")
+async def search_menu_callback(callback: CallbackQuery):
+    total = await count_animes()
+    text = (
+        f"🔍 <b>Anime Qidiruv Markazi</b>\n\n"
+        f"📚 Bazada jami <b>{total}</b> ta anime mavjud.\n\n"
+        f"✨ Anime <b>nomi</b> yoki <b>kodini</b> yuboring, yoki bo'lim tanlang:"
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=search_menu())
+    await callback.answer()
 
 
 # ─── CATALOG ─────────────────────────────────────────────────────────────────
@@ -219,7 +389,7 @@ async def search_by_code_hint(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("catalog:") & ~F.data.startswith("catalog:view:"))
 async def catalog_handler(callback: CallbackQuery):
     offset = int(callback.data.split(":")[1])
-    animes = await list_animes(offset=offset)
+    animes = await list_animes(offset=offset, limit=8)
     total = await count_animes()
     if not animes:
         await callback.answer("📭 Hali anime qo'shilmagan!", show_alert=True)
@@ -227,8 +397,8 @@ async def catalog_handler(callback: CallbackQuery):
     page = offset // 8 + 1
     total_pages = (total + 7) // 8
     text = (
-        f"📋 <b>Animeler katalogi</b> — {page}/{total_pages} sahifa (jami {total} ta)\n\n"
-        f"✅ — tugallangan  |  🔄 — davom etmoqda"
+        f"📋 <b>Animelar katalogi</b> — {page}/{total_pages} sahifa (jami {total} ta)\n\n"
+        f"🟢 — tugallangan  |  🔄 — davom etmoqda"
     )
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=catalog_keyboard(animes, offset, total))
@@ -241,7 +411,7 @@ async def catalog_view_anime(callback: CallbackQuery):
     anime_id = int(callback.data.split(":")[2])
     anime = await get_anime_by_id(anime_id)
     if not anime:
-        await callback.answer("Topilmadi", show_alert=True)
+        await callback.answer("Anime topilmadi", show_alert=True)
         return
     await callback.answer()
     await deliver_anime(callback.message, anime)
@@ -252,21 +422,38 @@ async def noop_handler(callback: CallbackQuery):
     await callback.answer()
 
 
-# ─── CODE INPUT ──────────────────────────────────────────────────────────────
+# ─── TEXT SEARCH & CODE INPUT ────────────────────────────────────────────────
 
 @router.message(F.text & ~F.text.startswith("/") & ~F.text.in_(IGNORED_TEXTS))
-async def code_handler(message: Message):
-    code = message.text.strip()
-    anime = await get_anime_by_code(code)
-    if not anime:
-        await message.answer(
-            "❌ <b>Bunday kodli anime topilmadi!</b>\n\n"
-            "📌 Kodni to'g'ri yozganingizni tekshiring yoki katalogdan qidiring.",
-            parse_mode="HTML",
-            reply_markup=search_menu()
-        )
+async def search_or_code_handler(message: Message):
+    query = message.text.strip()
+
+    # 1. Exact code match
+    anime = await get_anime_by_code(query)
+    if anime:
+        await deliver_anime(message, anime)
         return
-    await deliver_anime(message, anime)
+
+    # 2. Search by code prefix, name or genres
+    results = await search_animes(query, limit=10)
+    if len(results) == 1:
+        await deliver_anime(message, results[0])
+        return
+    elif len(results) > 1:
+        text = (
+            f"🔍 <b>«{query}»</b> so'rovi bo'yicha {len(results)} ta natija topildi:\n\n"
+            f"Ko'rmoqchi bo'lgan animengizni tanlang:"
+        )
+        await message.answer(text, parse_mode="HTML", reply_markup=search_results_keyboard(results))
+        return
+
+    # 3. No match found
+    await message.answer(
+        f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
+        f"💡 Qidiruvda xatolik bo'lmasligi uchun anime nomini yoki kodini tekshiring, yoki katalogdan qidiring.",
+        parse_mode="HTML",
+        reply_markup=search_menu()
+    )
 
 
 # ─── FAVORITES ───────────────────────────────────────────────────────────────
@@ -298,7 +485,53 @@ async def favorite_handler(callback: CallbackQuery):
             active_ep=active_ep,
             available_episodes=available_eps,
             total_episodes=anime.get("total_episodes", 1),
-            page=page
+            page=page,
+            anime_code=anime.get("code", ""),
         )
         await callback.message.edit_reply_markup(reply_markup=kb)
 
+
+# ─── INLINE QUERY ────────────────────────────────────────────────────────────
+
+@router.inline_query()
+async def inline_search_handler(inline_query: InlineQuery):
+    query = inline_query.query.strip()
+    if query:
+        results = await search_animes(query, limit=20)
+    else:
+        results = await get_top_animes(limit=15)
+
+    bot_info = await inline_query.bot.get_me()
+    items = []
+    for anime in results:
+        status_icon = "🟢" if anime.get("status") == "Tugallangan" else "🔄"
+        rating = anime.get("rating", 5.0) or 5.0
+        views = anime.get("views", 0) or 0
+        desc = f"{status_icon} Kod: {anime['code']} | 👁 {views:,} | ⭐ {rating:.1f}"
+
+        deep_link = f"https://t.me/{bot_info.username}?start={anime['code']}"
+        text = (
+            f"🎬 <b>{anime['name']}</b>\n"
+            f"╭────────────────────────────\n"
+            f"├‣ 🔑 Kod: <code>{anime['code']}</code>\n"
+            f"├‣ {status_icon} Status: {anime['status']}\n"
+            f"├‣ 👁 Ko'rishlar: {views:,} | ⭐ Reyting: {rating:.1f}\n"
+            f"╰────────────────────────────\n\n"
+            f"👉 <a href='{deep_link}'>Botda tomosha qilish va yuklab olish</a>"
+        )
+        thumb = anime.get("thumbnail_file_id") if anime.get("thumbnail_file_id", "").startswith("http") else None
+
+        item = InlineQueryResultArticle(
+            id=str(anime["id"]),
+            title=f"{anime['name']} [{anime['code']}]",
+            description=desc,
+            input_message_content=InputTextMessageContent(
+                message_text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=False,
+            ),
+            thumbnail_url=thumb,
+        )
+        items.append(item)
+
+    await inline_query.answer(items, cache_time=10, is_personal=True)

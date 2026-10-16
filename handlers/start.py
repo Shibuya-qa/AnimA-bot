@@ -11,9 +11,15 @@ router = Router()
 WELCOME_GIF = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWd5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5Zz/giphy.gif"
 
 WELCOME_TEXT = (
-    "👋 <b>Assalomu aleykum botimizga xush kelibsiz.</b>\n\n"
-    "🔸 Botimizda animelarni kanalimizga kirib yuklab olib, tomosha qilishingiz mumkin.\n\n"
-    "‼️ Botga to'g'ri kodni yuborishingiz mumkin!"
+    "👋 <b>Assalomu alaykum, anime ixlosmandi!</b>\n\n"
+    "🍿 <b>AnimAfundub</b> botiga xush kelibsiz!\n"
+    "Bu yerda siz eng sara animelarni o'zbek tilida yuqori sifatda tomosha qilishingiz va yuklab olishingiz mumkin.\n\n"
+    "✨ <b>Imkoniyatlar:</b>\n"
+    "• 🔍 Kod yoki nom orqali tezkor qidiruv\n"
+    "• 🔥 Eng mashhur TOP animelar reytingi\n"
+    "• 🎲 Tasodifiy anime tanlash\n"
+    "• 📜 Ko'rish tarixi va Sevimlilar ro'yxati\n\n"
+    "👇 <i>Boshlash uchun menyudan kerakli bo'limni tanlang yoki anime kodini yuboring:</i>"
 )
 
 

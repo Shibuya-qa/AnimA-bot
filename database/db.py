@@ -101,6 +101,28 @@ async def init_db():
                 PRIMARY KEY (user_id, anime_id)
             )
         """)
+
+        # Ensure new columns exist on animes table
+        async with db.execute("PRAGMA table_info(animes)") as cursor:
+            anime_cols = [row[1] for row in await cursor.fetchall()]
+            if "views" not in anime_cols:
+                await db.execute("ALTER TABLE animes ADD COLUMN views INTEGER DEFAULT 0")
+            if "downloads" not in anime_cols:
+                await db.execute("ALTER TABLE animes ADD COLUMN downloads INTEGER DEFAULT 0")
+            if "rating" not in anime_cols:
+                await db.execute("ALTER TABLE animes ADD COLUMN rating REAL DEFAULT 5.0")
+            if "rating_count" not in anime_cols:
+                await db.execute("ALTER TABLE animes ADD COLUMN rating_count INTEGER DEFAULT 0")
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS anime_ratings (
+                user_id INTEGER NOT NULL,
+                anime_id INTEGER NOT NULL,
+                score INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, anime_id)
+            )
+        """)
         await db.commit()
 
 
@@ -166,6 +188,109 @@ async def list_animes(offset: int = 0, limit: int = 10) -> list[dict]:
 async def count_animes() -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT COUNT(*) FROM animes") as cursor:
+            return (await cursor.fetchone())[0]
+
+
+async def increment_anime_views(anime_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE animes SET views = COALESCE(views, 0) + 1 WHERE id = ?", (anime_id,))
+        await db.commit()
+
+
+async def increment_anime_downloads(anime_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE animes SET downloads = COALESCE(downloads, 0) + 1 WHERE id = ?", (anime_id,))
+        await db.commit()
+
+
+async def search_animes(query: str, limit: int = 20) -> list[dict]:
+    query_clean = query.strip()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM animes 
+            WHERE code LIKE ? OR name LIKE ? OR genres LIKE ?
+            ORDER BY 
+                CASE WHEN code = ? THEN 1
+                     WHEN code LIKE ? THEN 2
+                     WHEN name LIKE ? THEN 3
+                     ELSE 4 END,
+                COALESCE(views, 0) DESC
+            LIMIT ?
+        """, (f"{query_clean}%", f"%{query_clean}%", f"%{query_clean}%",
+              query_clean, f"{query_clean}%", f"{query_clean}%", limit)) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
+async def get_top_animes(limit: int = 10) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM animes 
+            ORDER BY (COALESCE(views, 0) * 2 + COALESCE(downloads, 0) * 3) DESC, id DESC 
+            LIMIT ?
+        """, (limit,)) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
+async def get_random_anime() -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM animes ORDER BY RANDOM() LIMIT 1") as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+
+async def rate_anime(user_id: int, anime_id: int, score: int) -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO anime_ratings (user_id, anime_id, score) VALUES (?, ?, ?)
+            ON CONFLICT(user_id, anime_id) DO UPDATE SET score = excluded.score
+        """, (user_id, anime_id, score))
+        async with db.execute("SELECT AVG(score) as avg_score, COUNT(score) as cnt FROM anime_ratings WHERE anime_id = ?", (anime_id,)) as cursor:
+            r = await cursor.fetchone()
+            avg_score = round(r[0], 1) if r and r[0] is not None else float(score)
+            cnt = r[1] if r else 1
+        await db.execute("UPDATE animes SET rating = ?, rating_count = ? WHERE id = ?", (avg_score, cnt, anime_id))
+        await db.commit()
+        return {"rating": avg_score, "rating_count": cnt}
+
+
+async def get_user_rating(user_id: int, anime_id: int) -> int | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT score FROM anime_ratings WHERE user_id = ? AND anime_id = ?", (user_id, anime_id)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+
+async def get_all_genres() -> list[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT DISTINCT genres FROM animes WHERE genres != ''") as cursor:
+            rows = await cursor.fetchall()
+            genres_set = set()
+            for r in rows:
+                for g in r[0].replace("/", ",").split(","):
+                    g_clean = g.strip().title()
+                    if g_clean:
+                        genres_set.add(g_clean)
+            return sorted(list(genres_set))
+
+
+async def get_animes_by_genre(genre: str, offset: int = 0, limit: int = 10) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM animes 
+            WHERE genres LIKE ? 
+            ORDER BY COALESCE(views, 0) DESC, id DESC 
+            LIMIT ? OFFSET ?
+        """, (f"%{genre.strip()}%", limit, offset)) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
+async def count_animes_by_genre(genre: str) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM animes WHERE genres LIKE ?", (f"%{genre.strip()}%",)) as cursor:
             return (await cursor.fetchone())[0]
 
 
@@ -283,7 +408,7 @@ async def get_user_history(user_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT a.name, a.code, h.watched_at
+            SELECT a.id as anime_id, a.name, a.code, h.watched_at
             FROM user_history h JOIN animes a ON h.anime_id = a.id
             WHERE h.user_id = ? ORDER BY h.watched_at DESC LIMIT 10
         """, (user_id,)) as cursor:
@@ -306,7 +431,7 @@ async def get_favorites(user_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT a.name, a.code FROM favorites f
+            SELECT a.id as anime_id, a.name, a.code FROM favorites f
             JOIN animes a ON f.anime_id = a.id
             WHERE f.user_id = ? ORDER BY f.added_at DESC
         """, (user_id,)) as cursor:
