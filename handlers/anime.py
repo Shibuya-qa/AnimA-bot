@@ -259,6 +259,38 @@ async def download_ep_handler(callback: CallbackQuery):
     await send_episode_video(callback.bot, callback.message.chat.id, anime, ep_num)
 
 
+@router.callback_query(F.data.startswith("download_all:"))
+async def download_all_handler(callback: CallbackQuery):
+    """Send all available episodes one by one."""
+    import asyncio
+    anime_id = int(callback.data.split(":")[1])
+    anime = await get_anime_by_id(anime_id)
+    if not anime:
+        await callback.answer("Anime topilmadi", show_alert=True)
+        return
+
+    episodes = await get_episodes(anime_id)
+    if not episodes:
+        await callback.answer("Qismlar topilmadi", show_alert=True)
+        return
+
+    await callback.answer(f"📦 Barcha {len(episodes)} ta qism yuborilmoqda...")
+
+    notif = await callback.message.answer(
+        f"⏳ <b>{anime['name']}</b> — barcha {len(episodes)} ta qism yuborilmoqda, kuting...",
+        parse_mode="HTML"
+    )
+
+    for ep in sorted(episodes, key=lambda e: e["episode_number"]):
+        await send_episode_video(callback.bot, callback.message.chat.id, anime, ep["episode_number"])
+        await asyncio.sleep(0.5)  # flood avoid
+
+    try:
+        await notif.delete()
+    except Exception:
+        pass
+
+
 # ─── RATINGS ─────────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("rate_menu:"))
