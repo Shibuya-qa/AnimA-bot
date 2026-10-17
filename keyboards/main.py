@@ -203,11 +203,16 @@ def admin_menu() -> InlineKeyboardMarkup:
     builder.row(InlineKeyboardButton(text="➕ Anime qo'shish", callback_data="admin:add"))
     builder.row(InlineKeyboardButton(text="🎬 Qism qo'shish", callback_data="admin:addep_select"))
     builder.row(InlineKeyboardButton(text="📋 Animeler ro'yxati", callback_data="admin:list:0"))
-    builder.row(InlineKeyboardButton(text="📢 Obuna kanallar", callback_data="admin:subchannels"))
-    builder.row(InlineKeyboardButton(text="📣 Broadcast kanallar", callback_data="admin:bchannels"))
+    builder.row(
+        InlineKeyboardButton(text="📢 Obuna kanallar", callback_data="admin:subchannels"),
+        InlineKeyboardButton(text="📣 Broadcast kanallar", callback_data="admin:bchannels"),
+    )
     builder.row(
         InlineKeyboardButton(text="📊 Statistika", callback_data="admin:stats"),
-        InlineKeyboardButton(text="📦 Baza zaxirasi (Backup)", callback_data="admin:backup"),
+        InlineKeyboardButton(text="📦 Zaxira (Backup)", callback_data="admin:backup"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="📥 Kanaldan import qilish", callback_data="admin:import_help"),
     )
     return builder.as_markup()
 

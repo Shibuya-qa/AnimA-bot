@@ -143,6 +143,87 @@ async def manual_backup_handler(event: Message | CallbackQuery):
     await send_backup(bot, user_id, note="Admin panelidan so'ralgan zaxira")
 
 
+@router.message(Command("import_channel"))
+async def import_channel_cmd(message: Message):
+    if not await check_admin(message.from_user.id):
+        return
+    args = message.text.split()[1:]
+    if not args:
+        await message.answer(
+            "📥 <b>Kanal postlarini import qilish:</b>\n\n"
+            "Foydalanish: <code>/import_channel &lt;KANAL_ID_YOKI_USERNAME&gt; [POSTLAR_SONI]</code>\n\n"
+            "Misol: <code>/import_channel -1001234567890 300</code>\n"
+            "Yoki: <code>/import_channel @kanal_nomi 300</code>\n\n"
+            "⚠️ <i>Bot o'sha kanalda admin bo'lishi kerak!</i>",
+            parse_mode="HTML"
+        )
+        return
+
+    channel_input = args[0]
+    limit = int(args[1]) if len(args) > 1 and args[1].isdigit() else 300
+
+    status_msg = await message.answer(
+        f"⏳ <b>{channel_input}</b> kanalidan postlar o'qilmoqda (1 dan {limit} gacha)...\n"
+        "Iltimos, kuting, bu 1-2 daqiqa vaqt olishi mumkin.",
+        parse_mode="HTML"
+    )
+
+    from utils.importer import import_posts_from_channel
+    bot = message.bot
+
+    async def on_progress(imported, episodes, current_id):
+        try:
+            await status_msg.edit_text(
+                f"⏳ <b>Import jarayoni:</b>\n"
+                f"• Tekshirilmoqda: post #{current_id}\n"
+                f"• Topilgan animelar: <b>{imported} ta</b>\n"
+                f"• Topilgan qismlar: <b>{episodes} ta</b>",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+
+    try:
+        res = await import_posts_from_channel(
+            bot=bot,
+            channel_id=channel_input,
+            admin_id=message.from_user.id,
+            start_id=1,
+            end_id=limit,
+            progress_callback=on_progress,
+        )
+        await status_msg.edit_text(
+            f"✅ <b>Import muvaffaqiyatli yakunlandi!</b>\n\n"
+            f"🎬 Yangi qo'shilgan animelar: <b>{res['imported_animes']} ta</b>\n"
+            f"📺 Saqlangan qismlar: <b>{res['imported_episodes']} ta</b>\n"
+            f"🔍 Skanner qilingan postlar: {res['scanned']} ta",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await status_msg.edit_text(
+            f"❌ <b>Importda xatolik yuz berdi:</b>\n<code>{e}</code>\n\n"
+            "Bot kanalda admin ekanligini va kanal ID si to'g'riligini tekshiring.",
+            parse_mode="HTML"
+        )
+
+
+@router.callback_query(F.data == "admin:import_help")
+async def admin_import_help(callback: CallbackQuery):
+    if not await check_admin(callback.from_user.id):
+        return
+    text = (
+        "📥 <b>Kanaldan postlarni avtomatik import qilish</b>\n\n"
+        "Kanaldagi barcha 150 ta animelarni bazaga tiklash uchun quyidagi buyruqni yuboring:\n\n"
+        "<code>/import_channel &lt;KANAL_ID_YOKI_USERNAME&gt; 300</code>\n\n"
+        "Misol:\n"
+        "<code>/import_channel -1001234567890 300</code>\n\n"
+        "💡 <i>Eslatma: Bot o'sha kanalga admin qilib qo'shilgan bo'lishi kerak!</i>"
+    )
+    b = InlineKeyboardBuilder()
+    b.row(InlineKeyboardButton(text="🔙 Panel", callback_data="admin:back"))
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=b.as_markup())
+
+
 # ─── ANIME LIST ──────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("admin:list:"))
