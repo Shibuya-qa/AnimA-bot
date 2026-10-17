@@ -1,3 +1,4 @@
+import os
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 import logging
@@ -40,9 +41,9 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
     rating_count = anime.get("rating_count", 0) or 0
 
     if status == "Tugallangan":
-        ep_line = f"├‣ 📺 Qismlar: <b>{total_ep} ta qism</b>"
+        ep_line = f"├‣ 📺 Qismlar: <b>{total_ep} ta</b>"
     else:
-        ep_line = f"├‣ 📺 Qismlar: <b>{curr_total}/{total_ep} qism</b>"
+        ep_line = f"├‣ 📺 Qismlar: <b>{curr_total}/{total_ep}</b>"
 
     lines = [
         f"🎬 <b>{anime['name']}</b>",
@@ -50,7 +51,7 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
         f"├‣ 🔑 Kod: <code>{anime['code']}</code>",
         f"├‣ {status_emoji} Holati: <b>{status}</b>",
         ep_line,
-        f"├‣ 📀 Tanlangan qism: <b>{current_ep_num}-qism</b>",
+        f"├‣ 📀 Tanlangan: <b>{current_ep_num}-qism</b>",
     ]
     if anime.get("translation"):
         lines.append(f"├‣ 🌐 Tarjima: <b>{anime['translation']}</b>")
@@ -74,8 +75,8 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     file_id = ep_data.get("file_id") if ep_data else ""
     msg_id = ep_data.get("source_message_id") if ep_data else 0
 
-    # Fallback to single anime source_message_id if ep_num == 1
-    if not file_id and not msg_id and ep_num == 1:
+    # Fallback to single anime source_message_id if ep_num == 1 or no specific ep found
+    if not file_id and not msg_id:
         msg_id = anime.get("source_message_id", 0)
 
     caption_text = f"🎬 <b>{anime['name']}</b> — {ep_num}-qism\n🔑 Kod: <code>{anime['code']}</code>"
@@ -93,11 +94,13 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
         except Exception as e:
             log.error(f"[ANIME] send_video file_id failed: {e}")
 
-    if msg_id and SOURCE_CHANNEL_ID:
+    src_channel = os.getenv("SOURCE_CHANNEL_ID", SOURCE_CHANNEL_ID)
+    if msg_id and src_channel:
         try:
+            from_chat = int(src_channel) if str(src_channel).lstrip("-").isdigit() else src_channel
             await bot.copy_message(
                 chat_id=chat_id,
-                from_chat_id=SOURCE_CHANNEL_ID,
+                from_chat_id=from_chat,
                 message_id=msg_id,
                 caption=caption_text,
                 parse_mode="HTML",
@@ -121,7 +124,7 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     )
 
 
-async def deliver_anime(message: Message, anime: dict, ep_num: int = 1, page: int = 0):
+async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0):
     """Send anime card then send video for selected episode."""
     user_id = message.from_user.id
     is_fav = await is_favorite(user_id, anime["id"])
@@ -133,6 +136,16 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = 1, page: in
 
     episodes = await get_episodes(anime["id"])
     available_eps = [e["episode_number"] for e in episodes] if episodes else []
+
+    if ep_num is None:
+        curr = anime.get("current_episode", 1)
+        if available_eps:
+            if curr in available_eps:
+                ep_num = curr
+            else:
+                ep_num = available_eps[0]
+        else:
+            ep_num = curr or 1
 
     caption = format_anime_card(anime, ep_num)
     kb = anime_actions(
