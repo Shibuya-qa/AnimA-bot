@@ -153,10 +153,24 @@ def anime_actions(
     if nav:
         builder.row(*nav)
 
-    # Action row: Download/Watch selected ep, Favorite, Rating, Share
+    # --- Action buttons ---
+    # Button 1: current episode download
     builder.row(
         InlineKeyboardButton(text=f"📥 {active_ep}-qism videosini olish", callback_data=f"download_ep:{anime_id}:{active_ep}"),
     )
+
+    # Button 2: next episode (if available), else disabled
+    next_ep = next((ep for ep in all_eps if ep > active_ep), None)
+    if next_ep is not None:
+        builder.row(
+            InlineKeyboardButton(text=f"⏭ {next_ep}-qism (keyingi)", callback_data=f"download_ep:{anime_id}:{next_ep}"),
+        )
+
+    # Button 3: all episodes
+    if len(all_eps) > 1:
+        builder.row(
+            InlineKeyboardButton(text=f"📦 Barcha qismlarni olish ({len(all_eps)} ta)", callback_data=f"download_all:{anime_id}"),
+        )
 
     fav_text = "❤️ Sevimlilardan o'chirish" if is_fav else "🤍 Sevimlilarga qo'shish"
     builder.row(

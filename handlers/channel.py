@@ -1,7 +1,9 @@
+
 import os
 import re
 import logging
-from aiogram import Router, F
+# pyrefly: ignore[missing-import]
+from aiogram import Router
 from aiogram.types import Message
 from database.db import set_source_message_id, get_anime_by_code, add_episode
 from config import SOURCE_CHANNEL_ID
