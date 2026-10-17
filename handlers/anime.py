@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResult
 import logging
 
 from database.db import (
-    get_anime_by_code, get_anime_by_id,
+    get_anime_by_code, get_anime_by_id, get_animes_by_name,
     add_history, add_favorite, remove_favorite, is_favorite,
     list_animes, count_animes,
     get_episodes, get_episode,
@@ -72,10 +72,22 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
 async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     """Deliver video for a specific episode and increment download count."""
     ep_data = await get_episode(anime["id"], ep_num)
+
+    # If not found in primary anime, search sibling animes with same name
+    if not ep_data or (not ep_data.get("file_id") and not ep_data.get("source_message_id")):
+        siblings = await get_animes_by_name(anime["name"])
+        for sib in siblings:
+            if sib["id"] == anime["id"]:
+                continue
+            sib_ep = await get_episode(sib["id"], ep_num)
+            if sib_ep and (sib_ep.get("file_id") or sib_ep.get("source_message_id")):
+                ep_data = sib_ep
+                break
+
     file_id = ep_data.get("file_id") if ep_data else ""
     msg_id = ep_data.get("source_message_id") if ep_data else 0
 
-    # Fallback to single anime source_message_id if ep_num == 1 or no specific ep found
+    # Fallback to single anime source_message_id if no specific ep found
     if not file_id and not msg_id:
         msg_id = anime.get("source_message_id", 0)
 
@@ -124,6 +136,7 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     )
 
 
+
 async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0):
     """Send anime card then send video for selected episode."""
     user_id = message.from_user.id
@@ -134,8 +147,27 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
     if fresh_anime:
         anime = fresh_anime
 
+    # Get episodes from this anime AND all sibling animes with same name
     episodes = await get_episodes(anime["id"])
-    available_eps = [e["episode_number"] for e in episodes] if episodes else []
+
+    # Also pull episodes from same-name animes (e.g. mki1..mki12 all = "Mening kichik iblisim")
+    siblings = await get_animes_by_name(anime["name"])
+    sibling_ep_map = {}  # ep_number -> best (file_id, source_message_id)
+    for sib in siblings:
+        sib_eps = await get_episodes(sib["id"])
+        for ep in sib_eps:
+            en = ep["episode_number"]
+            if en not in sibling_ep_map:
+                sibling_ep_map[en] = ep
+            else:
+                # prefer entry with file_id
+                if not sibling_ep_map[en].get("file_id") and ep.get("file_id"):
+                    sibling_ep_map[en] = ep
+
+    # Merge with primary episodes
+    primary_map = {ep["episode_number"]: ep for ep in episodes}
+    merged_map = {**sibling_ep_map, **primary_map}  # primary wins
+    available_eps = sorted(merged_map.keys())
 
     if ep_num is None:
         curr = anime.get("current_episode", 1)
@@ -146,6 +178,7 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
                 ep_num = available_eps[0]
         else:
             ep_num = curr or 1
+
 
     caption = format_anime_card(anime, ep_num)
     kb = anime_actions(
@@ -261,7 +294,7 @@ async def download_ep_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("download_all:"))
 async def download_all_handler(callback: CallbackQuery):
-    """Send all available episodes one by one."""
+    """Send all available episodes one by one (including sibling animes)."""
     import asyncio
     anime_id = int(callback.data.split(":")[1])
     anime = await get_anime_by_id(anime_id)
@@ -269,26 +302,39 @@ async def download_all_handler(callback: CallbackQuery):
         await callback.answer("Anime topilmadi", show_alert=True)
         return
 
-    episodes = await get_episodes(anime_id)
-    if not episodes:
+    # Collect episodes from all sibling animes (same name)
+    sibling_ep_map = {}
+    siblings = await get_animes_by_name(anime["name"])
+    for sib in siblings:
+        sib_eps = await get_episodes(sib["id"])
+        for ep in sib_eps:
+            en = ep["episode_number"]
+            if en not in sibling_ep_map:
+                sibling_ep_map[en] = ep
+            elif not sibling_ep_map[en].get("file_id") and ep.get("file_id"):
+                sibling_ep_map[en] = ep
+
+    if not sibling_ep_map:
         await callback.answer("Qismlar topilmadi", show_alert=True)
         return
 
-    await callback.answer(f"📦 Barcha {len(episodes)} ta qism yuborilmoqda...")
+    all_ep_nums = sorted(sibling_ep_map.keys())
+    await callback.answer(f"📦 Barcha {len(all_ep_nums)} ta qism yuborilmoqda...")
 
     notif = await callback.message.answer(
-        f"⏳ <b>{anime['name']}</b> — barcha {len(episodes)} ta qism yuborilmoqda, kuting...",
+        f"⏳ <b>{anime['name']}</b> — barcha {len(all_ep_nums)} ta qism yuborilmoqda, kuting...",
         parse_mode="HTML"
     )
 
-    for ep in sorted(episodes, key=lambda e: e["episode_number"]):
-        await send_episode_video(callback.bot, callback.message.chat.id, anime, ep["episode_number"])
+    for ep_num in all_ep_nums:
+        await send_episode_video(callback.bot, callback.message.chat.id, anime, ep_num)
         await asyncio.sleep(0.5)  # flood avoid
 
     try:
         await notif.delete()
     except Exception:
         pass
+
 
 
 # ─── RATINGS ─────────────────────────────────────────────────────────────────

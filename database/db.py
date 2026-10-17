@@ -185,6 +185,14 @@ async def list_animes(offset: int = 0, limit: int = 10) -> list[dict]:
             return [dict(r) for r in await cursor.fetchall()]
 
 
+async def get_animes_by_name(name: str) -> list[dict]:
+    """Return all anime rows with this exact name (sibling codes like mki1..mki12)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM animes WHERE name = ?", (name,)) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
 async def count_animes() -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT COUNT(*) FROM animes") as cursor:
