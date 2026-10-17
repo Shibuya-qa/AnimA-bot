@@ -128,6 +128,21 @@ async def admin_stats(callback: CallbackQuery):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=b.as_markup())
 
 
+@router.message(Command("backup"))
+@router.callback_query(F.data == "admin:backup")
+async def manual_backup_handler(event: Message | CallbackQuery):
+    user_id = event.from_user.id
+    if not await check_admin(user_id):
+        return
+    bot = event.bot
+    if isinstance(event, CallbackQuery):
+        await event.answer("📦 Zaxira fayli yuborilmoqda...")
+    else:
+        await event.answer("📦 Zaxira fayli tayyorlanmoqda...")
+    from utils.backup import send_backup
+    await send_backup(bot, user_id, note="Admin panelidan so'ralgan zaxira")
+
+
 # ─── ANIME LIST ──────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data.startswith("admin:list:"))

@@ -33,6 +33,9 @@ async def main():
     dp.include_router(channel.router)
     dp.include_router(anime.router)
 
+    from utils.backup import daily_backup_scheduler
+    asyncio.create_task(daily_backup_scheduler(bot))
+
     logging.info("Bot ishga tushdi!")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
