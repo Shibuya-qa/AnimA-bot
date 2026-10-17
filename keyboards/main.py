@@ -154,19 +154,14 @@ def anime_actions(
         builder.row(*nav)
 
     # --- Action buttons ---
-    # Button 1: current episode download
-    builder.row(
-        InlineKeyboardButton(text=f"📥 {active_ep}-qism videosini olish", callback_data=f"download_ep:{anime_id}:{active_ep}"),
-    )
-
-    # Button 2: next episode (if available), else disabled
+    # Button 1: next episode (if available)
     next_ep = next((ep for ep in all_eps if ep > active_ep), None)
     if next_ep is not None:
         builder.row(
             InlineKeyboardButton(text=f"⏭ {next_ep}-qism (keyingi)", callback_data=f"download_ep:{anime_id}:{next_ep}"),
         )
 
-    # Button 3: all episodes
+    # Button 2: all episodes
     if len(all_eps) > 1:
         builder.row(
             InlineKeyboardButton(text=f"📦 Barcha qismlarni olish ({len(all_eps)} ta)", callback_data=f"download_all:{anime_id}"),
