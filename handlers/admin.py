@@ -764,3 +764,147 @@ async def admin_del_bch(callback: CallbackQuery):
     )
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=broadcast_channels_menu(channels))
     await callback.answer("✅ O'chirildi")
+
+
+# ─── BROADCAST TO ALL USERS (MAILING) ────────────────────────────────────────
+
+@router.callback_query(F.data == "admin:mailing")
+async def admin_mailing_start(callback: CallbackQuery, state: FSMContext):
+    if not await check_admin(callback.from_user.id):
+        return
+    total_users = await count_users()
+    b = InlineKeyboardBuilder()
+    b.row(InlineKeyboardButton(text="❌ Bekor qilish", callback_data="admin:back"))
+    await state.set_state(BroadcastUserState.waiting_for_message)
+    await callback.message.edit_text(
+        f"✉️ <b>Barcha foydalanuvchilarga xabar yuborish</b>\n\n"
+        f"👥 Bazadagi jami foydalanuvchilar: <b>{total_users} ta</b>\n\n"
+        "Yubormoqchi bo'lgan xabaringizni yuboring.\n"
+        "<i>(Oddiy matn, rasm, video, audio, GIF, hujjat yoki repost/forward xabar bo'lishi mumkin)</i>\n\n"
+        "Bekor qilish uchun pastdagi tugmani bosing yoki /cancel yozing.",
+        parse_mode="HTML",
+        reply_markup=b.as_markup()
+    )
+
+
+@router.message(BroadcastUserState.waiting_for_message, Command("cancel"))
+async def admin_mailing_cancel_cmd(message: Message, state: FSMContext):
+    if not await check_admin(message.from_user.id):
+        return
+    await state.clear()
+    await message.answer("❌ Xabar yuborish bekor qilindi.", reply_markup=admin_menu())
+
+
+@router.message(BroadcastUserState.waiting_for_message)
+async def admin_mailing_preview(message: Message, state: FSMContext):
+    if not await check_admin(message.from_user.id):
+        return
+    total_users = await count_users()
+    await state.update_data(broadcast_message_id=message.message_id, from_chat_id=message.chat.id)
+    await state.set_state(BroadcastUserState.confirm)
+
+    b = InlineKeyboardBuilder()
+    b.row(
+        InlineKeyboardButton(text="✅ Yuborishni boshlash", callback_data="admin:domailing"),
+        InlineKeyboardButton(text="❌ Bekor qilish", callback_data="admin:cancelmailing")
+    )
+
+    await message.answer(
+        f"👆 <b>Yuqoridagi xabar bazadagi {total_users} ta foydalanuvchiga yuboriladi.</b>\n\n"
+        "Haqiqatan ham yuborishni tasdiqlaysizmi?",
+        parse_mode="HTML",
+        reply_markup=b.as_markup()
+    )
+
+
+@router.callback_query(F.data == "admin:cancelmailing", BroadcastUserState.confirm)
+async def admin_mailing_cancel_cb(callback: CallbackQuery, state: FSMContext):
+    if not await check_admin(callback.from_user.id):
+        return
+    await state.clear()
+    await callback.message.edit_text("❌ Xabar yuborish bekor qilindi.", reply_markup=admin_menu())
+
+
+@router.callback_query(F.data == "admin:domailing", BroadcastUserState.confirm)
+async def admin_mailing_send(callback: CallbackQuery, state: FSMContext):
+    if not await check_admin(callback.from_user.id):
+        return
+    data = await state.get_data()
+    msg_id = data.get("broadcast_message_id")
+    from_chat_id = data.get("from_chat_id")
+    await state.clear()
+
+    user_ids = await get_all_user_ids()
+    total = len(user_ids)
+    if total == 0:
+        await callback.message.edit_text("❌ Foydalanuvchilar topilmadi.", reply_markup=admin_menu())
+        return
+
+    status_msg = await callback.message.edit_text(
+        f"⏳ <b>Xabar yuborilmoqda...</b>\n\n"
+        f"👥 Jami: <b>{total} ta</b>\n"
+        f"✅ Yuborildi: <b>0 ta</b>\n"
+        f"❌ Xato/Bloklagan: <b>0 ta</b>\n"
+        f"📊 Jarayon: <b>0%</b>",
+        parse_mode="HTML"
+    )
+
+    bot = callback.bot
+    success, failed = 0, 0
+    start_time = time.time()
+    last_update_time = time.time()
+
+    for idx, u_id in enumerate(user_ids, 1):
+        try:
+            await bot.copy_message(
+                chat_id=u_id,
+                from_chat_id=from_chat_id,
+                message_id=msg_id
+            )
+            success += 1
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after)
+            try:
+                await bot.copy_message(
+                    chat_id=u_id,
+                    from_chat_id=from_chat_id,
+                    message_id=msg_id
+                )
+                success += 1
+            except Exception:
+                failed += 1
+        except Exception:
+            failed += 1
+
+        # Throttle to avoid Telegram flood limits (~35 ms delay)
+        await asyncio.sleep(0.035)
+
+        # Update progress every 3 seconds or on the last iteration
+        if time.time() - last_update_time >= 3.0 or idx == total:
+            last_update_time = time.time()
+            percent = int((idx / total) * 100)
+            try:
+                await status_msg.edit_text(
+                    f"⏳ <b>Xabar yuborilmoqda...</b>\n\n"
+                    f"👥 Jami: <b>{total} ta</b> ({idx}/{total})\n"
+                    f"✅ Yuborildi: <b>{success} ta</b>\n"
+                    f"❌ Xato/Bloklagan: <b>{failed} ta</b>\n"
+                    f"📊 Jarayon: <b>{percent}%</b>",
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+
+    elapsed = round(time.time() - start_time, 1)
+    b = InlineKeyboardBuilder()
+    b.row(InlineKeyboardButton(text="🔙 Panel", callback_data="admin:back"))
+
+    await status_msg.edit_text(
+        f"✅ <b>Xabar yuborish yakunlandi!</b>\n\n"
+        f"👥 Jami foydalanuvchilar: <b>{total} ta</b>\n"
+        f"✅ Muvaffaqiyatli yetkazildi: <b>{success} ta</b>\n"
+        f"❌ Yetib bormadi (bloklagan/xato): <b>{failed} ta</b>\n"
+        f"⏱ Ketgan vaqt: <b>{elapsed} soniya</b>",
+        parse_mode="HTML",
+        reply_markup=b.as_markup()
+    )
