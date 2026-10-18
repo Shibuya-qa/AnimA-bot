@@ -1,139 +1,187 @@
-# 🎬 Anime Telegram Bot
+# 🎬 AnimaFundub — Telegram Anime Bot
 
-A Telegram bot for browsing and watching anime by short numeric codes. Users send a
-code (or pick from a paginated catalog), and the bot delivers an info card together
-with the video, copied straight from a private storage channel. Built with **aiogram 3**
-and an async **SQLite** database.
-
-<img width="331" height="392" alt="image" src="https://github.com/user-attachments/assets/b1b934df-1943-4d57-b7c2-96617b9019f2" />
-
-
-<img width="256" height="237" alt="image" src="https://github.com/user-attachments/assets/c34cd809-3f07-4f0f-bdd7-faa3fffc30da" />
-
-
-> The bot interface is in **Uzbek**.
+Zamonaviy, tezkor va ko'p funksiyali Telegram anime boti. Foydalanuvchilar qisqa raqamli kodlar, nomlar yoki janrlar bo'yicha anime qidirishi, qismlarni tanlab tomosha qilishi hamda guruhlarda bevosita botdan foydalanishi mumkin. Bot **Python 3.10+**, **aiogram 3.13** va asinxron **SQLite (aiosqlite)** asosida qurilgan.
 
 ---
 
-## ✨ Features
+## 📸 Skrinshotlar / Screenshots
 
-### For users
-- **Watch by code** — send an anime's code (e.g. `81`) and get its card + video instantly.
-- **Deep links** — `/start <code>` opens straight into an anime (shareable links).
-- **Catalog** — browse all anime with pagination (8 per page), completed/ongoing markers.
-- **Favorites** — add/remove anime to a personal favorites list.
-- **Watch history** — the bot keeps track of what each user has opened.
-- **Personal cabinet** — favorites and history in one place.
-- **Forced subscription** — users must join the required channel(s) before using the bot
-  (enforced by middleware).
+<p align="center">
+  <img src="docs/images/anime_card.png" width="30%" alt="Anime kartasi va qismlar" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/images/group_search.png" width="30%" alt="Guruhda qidirish" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/images/admin_panel.png" width="30%" alt="Admin Panel" />
+</p>
 
-### For admins (`/panel`)
-- **Password-protected access** — non-admins unlock the panel with a password, then get
-  saved as admins in the database.
-- **Anime management** — add / edit / delete anime through a step-by-step FSM form
-  (code, name, status, episodes, translation, genres, thumbnail, description).
-- **Statistics** — total users, anime, admins and broadcast channels.
-- **Subscription channels** — manage which channels users must be subscribed to.
-- **Broadcast channels** — manage channels and broadcast new anime to them.
+<p align="center">
+  <b>1. Anime kartasi & Qismlar</b> &nbsp;&nbsp;|&nbsp;&nbsp; <b>2. Guruhda qidirish</b> &nbsp;&nbsp;|&nbsp;&nbsp; <b>3. Admin boshqaruv paneli</b>
+</p>
 
 ---
 
-## 🛠 Tech Stack
+## ✨ Imkoniyatlar (Features)
 
-| Layer        | Technology |
-|--------------|-----------|
-| Language     | Python 3.10+ |
-| Framework    | [aiogram 3.13](https://docs.aiogram.dev/) (async, router-based) |
-| Database     | SQLite via [aiosqlite](https://github.com/omnilib/aiosqlite) (async) |
-| State (FSM)  | aiogram `MemoryStorage` |
-| Config       | `python-dotenv` |
+### 👤 Foydalanuvchilar uchun:
+- **🔑 Kod bo'yicha tomosha qilish** — Animenung qisqa kodini (masalan: `31`) yuborish orqali to'liq ma'lumot va videoni bir zumda olish.
+- **🔗 Deep Links** — `/start <code>` havolasi orqali to'g'ridan-to'g'ri kerakli animega o'tish (do'stlarga ulashish uchun juda qulay).
+- **📺 Ko'p qismli (Multi-Episode) tizim** — Har bir qism uchun qulay tugmalar tarmog'i (1, 2, 3...), qismlar paginatsiyasi, keyingi qismga tezkor o'tish va barcha qismlarni birdaniga olish tugmasi.
+- **🛡 Kontent himoyasi (Anti-Share / Protect Content)** — Bot tomonidan yuborilgan videolarni boshqa chatlarga uzatish (forward), qurilmaga yuklab olish (download) va skrinshot olish bloklangan.
+- **👥 Guruhlarga to'liq moslashuvchanlik (Group Mode)**:
+  - Guruhlarda `/anime <nomi>`, `/kod <raqam>` buyruqlari.
+  - Bot foydalanuvchi nomini teg qilish orqali qidirish (`@bot_username Naruto`).
+  - Bot xabarlariga reply qilib qidirish.
+  - Guruh chatini ortiqcha menyular bilan to'ldirmasdan toza va qulay javob qaytarish.
+- **🔍 Qidiruv va tavsiyalar**:
+  - Nomi yoki kalit so'zlar bo'yicha qidiruv.
+  - 🎭 **Janrlar bo'yicha saralash** (Fantastika, Jangari, Romantika va h.k.).
+  - 🔥 **Top Animelar** — Ko'rishlar va reyting bo'yicha eng ommabop animelar ro'yxati.
+  - 🎲 **Random Anime** — Tasodifiy anime tavsiya qilish.
+  - ⚡ **Inline qidiruv** — Istalgan chatda `@bot_username anime_nomi` deb qidirish.
+- **⭐ Reyting va statistika**:
+  - Foydalanuvchilar tomonidan 1 dan 5 gacha baholash tizimi.
+  - Har bir animeda ko'rishlar (👁) va yuklab olishlar (📥) sonini ko'rsatish.
+- **🗂 Shaxsiy kabinet**:
+  - ❤️ **Sevimlilar (Favorites)** — Yoqqan animelarni saqlab qo'yish.
+  - 🕒 **Ko'rishlar tarixi (History)** — Avval ochilgan animelar ro'yxati.
+- **🔒 Majburiy obuna (Forced Subscription)** — Kanallarga a'zo bo'lmaguncha botdan foydalanishni cheklovchi xavfsiz middleware va tekshirish tizimi.
 
 ---
 
-## 🧠 How it works
-
-Videos are **not** stored in the database — only their location. Each anime record keeps
-a `source_message_id` pointing at a message in a private **storage channel**
-(`SOURCE_CHANNEL_ID`). When a user requests an anime:
-
-1. The bot sends a formatted **info card** (status, episodes, genres, description).
-2. It then uses `copy_message` to deliver the video from the storage channel into the
-   user's chat — so the original file never has to be re-uploaded.
-
-This keeps the database light and lets a single uploaded video serve unlimited users.
+### 👑 Adminlar uchun (`/panel`):
+- **🔐 Xavfsiz kirish** — Parol bilan himoyalangan admin tizimi va bazaga yangi adminlarni biriktirish.
+- **➕ Animelar va Qismlar boshqaruvi**:
+  - Yangi animelarni bosqichma-bosqich (FSM) qo'shish va tahrirlash.
+  - Har bir anime uchun alohida yangi qismlarni (video yoki post ID) yuklash.
+  - Ro'yxatdan anime qidirish va o'chirish.
+- **📊 To'liq statistika** — Jami foydalanuvchilar, so'nggi 24 soat va 7 kundagi faol userlar, umumiy animelar, ko'rishlar va yuklashlar statistikasi.
+- **✉️ Xabar tarqatish (Broadcast)** — Botning barcha a'zolariga rasm, video va matnli xabarlarni xavfsiz tezlikda tarqatish.
+- **📢 Majburiy obuna kanallari** — Botga ulanadigan obuna kanallarini admin panel orqali qo'shish va olib tashlash.
+- **📣 Kanalga avtomatik e'lon (Broadcast Channels)** — Yangi anime qo'shilganda belgilangan kanallarga chiroyli post qilib chiqarish.
+- **📥 Kanaldan import** — Yopiq kanaldan postlarni ommaviy import qilish imkoniyati.
+- **📦 Avtomatik zaxira nusxasi (Auto Backup)** — Har kuni belgilangan vaqtda SQLite ma'lumotlar bazasini bosh adminga yuboruvchi avtomatik scheduler.
 
 ---
 
-## 📁 Project Structure
+## 🛠 Texnologiyalar (Tech Stack)
+
+| Qatlam | Texnologiya | Tavsif |
+|---|---|---|
+| **Dasturlash tili** | Python 3.10+ | Asinxron imkoniyatlar |
+| **Bot Framework** | [aiogram 3.13](https://docs.aiogram.dev/) | Routerlar, filtrlash va middleware arxitekturasi |
+| **Ma'lumotlar bazasi**| SQLite via [aiosqlite](https://github.com/omnilib/aiosqlite) | Yengil, tezkor va asinxron relational DB |
+| **State Management** | aiogram MemoryStorage | FSM (Finite State Machine) holatlari |
+| **Konfiguratsiya** | `python-dotenv` | Muhit o'zgaruvchilari (`.env`) |
+
+---
+
+## 🧠 Qanday ishlaydi? (Arxitektura)
+
+Videolar ma'lumotlar bazasida **saqlanmaydi** — faqat ularning koordinatalari saqlanadi. Har bir anime qismi xususiy **saqlash kanali**dagi (`SOURCE_CHANNEL_ID`) xabar ID raqamiga (`source_message_id`) yoki Telegram `file_id` ga bog'lanadi:
 
 ```
-.
-├── bot.py                  # Entry point: sets up Dispatcher, middlewares, routers
-├── config.py               # Loads env vars (token, admin ids, source channel)
+[ Foydalanuvchi / Guruh ]
+          │
+          ▼
+   [ Anime Bot ]
+          │  1. Anime kartasi & qismlar menyusi yuboriladi
+          │  2. bot.copy_message / bot.send_video (protect_content=True)
+          ▼
+[ Xususiy Saqlash Kanali ] ────► Video to'g'ridan-to'g'ri foydalanuvchiga yetkaziladi
+```
+
+Bu yondashuv ma'lumotlar bazasini juda ixcham saqlaydi va fayllarni qayta yuklash zaruratini yo'q qiladi. Shuningdek, `protect_content=True` orqali mualliflik huquqi va kanalingiz kontenti himoyalangan bo'ladi.
+
+---
+
+## 📁 Loyiha tuzilishi (Project Structure)
+
+```text
+animebot/
+├── bot.py                  # Asosiy kirish nuqtasi: Dispatcher, middleware va scheduler
+├── config.py               # .env ma'lumotlarini yuklash
+├── requirements.txt        # Kerakli kutubxonalar ro'yxati
+├── anime_bot.db            # SQLite ma'lumotlar bazasi (avtomatik yaratiladi)
+├── docs/
+│   └── images/             # README uchun skrinshotlar
 ├── database/
-│   └── db.py               # Async SQLite: users, anime, favorites, history, channels
+│   └── db.py               # Barcha SQL so'rovlar (users, animes, episodes, ratings, channels)
 ├── handlers/
-│   ├── start.py            # /start, deep links, welcome
-│   ├── anime.py            # Code lookup, catalog, delivery, favorites
-│   ├── cabinet.py          # User cabinet (favorites, history)
-│   ├── admin.py            # Admin panel: CRUD, stats, channels (FSM)
-│   ├── subscription.py     # Forced-subscription flow
-│   └── channel.py          # Auto-detect uploads in the storage channel
+│   ├── start.py            # /start, deep linklar va asosiy menyu
+│   ├── anime.py            # Kod bo'yicha qidirish, qismlar boshqaruvi, reyting, guruh qidiruvi
+│   ├── cabinet.py          # Foydalanuvchi kabineti (Sevimlilar va Tarix)
+│   ├── admin.py            # Admin panel (CRUD, statistika, kanallar, xabar yuborish)
+│   ├── subscription.py     # Majburiy obuna tekshiruvi
+│   └── channel.py          # Saqlash kanalidan avtomatik aniqlash
 ├── keyboards/
-│   └── main.py             # Inline & reply keyboards
+│   └── main.py             # Barcha inline va reply tugmalar (qismlar jadvali, menyular)
 ├── middlewares/
-│   ├── subscription.py     # Blocks users who aren't subscribed
-│   └── chat_type.py        # Restricts the bot to private chats
+│   ├── subscription.py     # Kanallarga obuna bo'lmaganlarni to'xtatuvchi middleware
+│   ├── chat_type.py        # Guruh va shaxsiy chat xabarlarini moslashtiruvchi middleware
+│   └── activity.py         # Foydalanuvchi faolligini qayd etuvchi middleware
 └── utils/
-    └── broadcaster.py      # Broadcasting anime to channels
+    ├── backup.py           # Kunlik avtomatik bazani zaxiralash
+    └── broadcaster.py      # Xabarlarni tezkor va xavfsiz tarqatish yordamchisi
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 O'rnatish va Ishga tushirish (Installation)
 
-### Prerequisites
-- Python 3.10+
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
-- A private channel to store videos (the bot must be an admin there)
+### Talablar:
+- Python 3.10 yoki undan yuqori
+- [@BotFather](https://t.me/BotFather) orqali olingan Telegram Bot tokeni
+- Videolarni saqlash uchun yopiq kanal (bot ushbu kanalda **Admin** bo'lishi shart)
 
-### Installation
+### Qadamlar:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/bek-vap/animebot.git
-cd animebot
+# 1. Repozitoriyani klon qiling
+git clone https://github.com/Shibuya-qa/AnimA-bot.git
+cd AnimA-bot
 
-# 2. (recommended) create a virtual environment
+# 2. Virtual muhit yaratish va faollashtirish
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+# Windows:
+venv\Scripts\activate
+# Linux / macOS:
+source venv/bin/activate
 
-# 3. Install dependencies
+# 3. Kerakli paketlarni o'rnatish
 pip install -r requirements.txt
 
-# 4. Configure environment
-cp .env.example .env            # then fill in the values
+# 4. Muhit o'zgaruvchilarini sozlash
+cp .env.example .env
+```
 
-# 5. Run the bot
+`.env` faylini ochib, o'z ma'lumotlaringizni kiriting:
+
+```env
+BOT_TOKEN=1234567890:AAExampleTokenHere
+ADMIN_IDS=123456789,987654321
+ADMIN_PASSWORD=sizning_maxfiy_parolingiz
+SOURCE_CHANNEL_ID=-1001234567890
+```
+
+### Botni ishga tushirish:
+```bash
 python bot.py
 ```
 
-### Environment variables (`.env`)
+---
 
-| Variable            | Description |
-|---------------------|-------------|
-| `BOT_TOKEN`         | Bot token from @BotFather |
-| `ADMIN_IDS`         | Comma-separated Telegram user IDs with admin access |
-| `ADMIN_PASSWORD`    | Password to unlock the admin panel |
-| `SOURCE_CHANNEL_ID` | ID of the private channel where videos are stored (e.g. `-1001234567890`) |
+## ⚙️ Sozlamalar jadvali (`.env`)
 
-The SQLite database (`anime_bot.db`) is created automatically on first run.
+| O'zgaruvchi | Tavsif | Misol |
+|---|---|---|
+| `BOT_TOKEN` | Telegram bot tokeni | `7123456789:AAF...` |
+| `ADMIN_IDS` | Asosiy adminlarning Telegram ID raqamlari (vergul bilan) | `123456789` |
+| `ADMIN_PASSWORD` | `/panel` ga kirish uchun boshlang'ich parol | `admin123` |
+| `SOURCE_CHANNEL_ID` | Videolar saqlanadigan kanal ID'si | `-1001987654321` |
 
 ---
 
-## 📝 Notes
+## 📝 Muallif va Litsenziya
 
-- Built as a hands-on project to practice async Python, the aiogram 3 router/middleware
-  model, FSM-based forms and relational data modelling.
-- Secrets are kept out of version control via `.gitignore`; see `.env.example` for the
-  expected format.
+Loyiha anime ixlosmandlari va jamoalari uchun qulay, xavfsiz va tezkor platforma taqdim etish maqsadida ishlab chiqilgan.
+Taklif va savollar bo'yicha GitHub issues orqali bog'lanishingiz mumkin.
