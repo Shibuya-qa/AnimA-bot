@@ -338,6 +338,13 @@ async def count_users() -> int:
             return (await cursor.fetchone())[0]
 
 
+async def get_all_user_ids() -> list[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT id FROM users") as cursor:
+            rows = await cursor.fetchall()
+            return [r[0] for r in rows]
+
+
 async def get_active_users_stats() -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(

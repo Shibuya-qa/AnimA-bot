@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -5,12 +8,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
+from aiogram.exceptions import TelegramRetryAfter, TelegramForbiddenError
 
 from config import ADMIN_IDS, ADMIN_PASSWORD, SOURCE_CHANNEL_ID
 from database.db import (
     add_anime, delete_anime, update_anime, list_animes, count_animes,
     count_users, get_active_users_stats, get_anime_by_code, get_anime_by_id,
-    is_admin_in_db, add_admin, list_admins,
+    is_admin_in_db, add_admin, list_admins, get_all_user_ids,
     get_sub_channels, add_sub_channel, delete_sub_channel,
     get_broadcast_channels, add_broadcast_channel, delete_broadcast_channel,
     add_episode, get_episodes, get_episode, delete_episode,
@@ -61,6 +65,11 @@ class AddBroadcastChannel(StatesGroup):
     channel_id = State()
 
 
+class BroadcastUserState(StatesGroup):
+    waiting_for_message = State()
+    confirm = State()
+
+
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 async def check_admin(user_id: int) -> bool:
@@ -97,9 +106,11 @@ async def password_check(message: Message, state: FSMContext):
 # ─── PANEL MAIN ──────────────────────────────────────────────────────────────
 
 @router.callback_query(F.data == "admin:back")
-async def admin_back(callback: CallbackQuery):
+async def admin_back(callback: CallbackQuery, state: FSMContext = None):
     if not await check_admin(callback.from_user.id):
         return
+    if state:
+        await state.clear()
     await callback.message.edit_text("👑 <b>Admin Panel</b>", parse_mode="HTML", reply_markup=admin_menu())
 
 

@@ -221,7 +221,8 @@ def admin_menu() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📦 Zaxira (Backup)", callback_data="admin:backup"),
     )
     builder.row(
-        InlineKeyboardButton(text="📥 Kanaldan import qilish", callback_data="admin:import_help"),
+        InlineKeyboardButton(text="✉️ Xabar yuborish", callback_data="admin:mailing"),
+        InlineKeyboardButton(text="📥 Kanaldan import", callback_data="admin:import_help"),
     )
     return builder.as_markup()
 
