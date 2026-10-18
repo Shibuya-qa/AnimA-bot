@@ -25,9 +25,15 @@ async def check_sub_handler(callback: CallbackQuery):
         await callback.answer("❌ Hali obuna bo'lmadingiz!", show_alert=True)
     else:
         await callback.message.delete()
-        await callback.message.answer(
-            "✅ <b>Rahmat! Endi botdan foydalanishingiz mumkin.</b>",
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
+        if callback.message.chat.type in ("group", "supergroup"):
+            await callback.message.answer(
+                "✅ <b>Rahmat! Endi guruhda botdan foydalanishingiz mumkin.</b>",
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.answer(
+                "✅ <b>Rahmat! Endi botdan foydalanishingiz mumkin.</b>",
+                parse_mode="HTML",
+                reply_markup=main_menu()
+            )
         await callback.answer("✅ Tabriklaymiz!")

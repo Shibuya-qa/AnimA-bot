@@ -40,7 +40,7 @@ async def start_handler(message: Message, command: CommandObject = None):
             return
 
     is_adm = await check_admin(message.from_user.id)
-    kb = main_menu(is_admin=is_adm)
+    kb = None if message.chat.type in ("group", "supergroup") else main_menu(is_admin=is_adm)
 
     try:
         await message.answer_animation(

@@ -1,6 +1,8 @@
 import os
+import re
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
+from aiogram.filters import Command, CommandObject
 import logging
 
 from database.db import (
@@ -99,7 +101,8 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
                 chat_id=chat_id,
                 video=file_id,
                 caption=caption_text,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                protect_content=True,
             )
             await increment_anime_downloads(anime["id"])
             return
@@ -116,6 +119,7 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
                 message_id=msg_id,
                 caption=caption_text,
                 parse_mode="HTML",
+                protect_content=True,
             )
             await increment_anime_downloads(anime["id"])
             log.info(f"[ANIME] copy_message OK: ep={ep_num} msg_id={msg_id}")
@@ -137,10 +141,11 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
 
 
 
-async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0):
+async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0, user_id: int = None):
     """Send anime card then send video for selected episode."""
-    user_id = message.from_user.id
-    is_fav = await is_favorite(user_id, anime["id"])
+    if user_id is None:
+        user_id = message.from_user.id if message.from_user else 0
+    is_fav = await is_favorite(user_id, anime["id"]) if user_id else False
 
     await increment_anime_views(anime["id"])
     fresh_anime = await get_anime_by_id(anime["id"])
@@ -505,7 +510,7 @@ async def catalog_view_anime(callback: CallbackQuery):
         await callback.answer("Anime topilmadi", show_alert=True)
         return
     await callback.answer()
-    await deliver_anime(callback.message, anime)
+    await deliver_anime(callback.message, anime, user_id=callback.from_user.id)
 
 
 @router.callback_query(F.data == "noop")
@@ -515,9 +520,53 @@ async def noop_handler(callback: CallbackQuery):
 
 # ─── TEXT SEARCH & CODE INPUT ────────────────────────────────────────────────
 
+@router.message(Command("anime", "kod", "qidir", "search", ignore_mention=True))
 @router.message(F.text & ~F.text.startswith("/") & ~F.text.in_(IGNORED_TEXTS))
-async def search_or_code_handler(message: Message):
-    query = message.text.strip()
+async def search_or_code_handler(message: Message, command: CommandObject = None):
+    bot_info = await message.bot.get_me()
+    bot_username = (bot_info.username or "").lower() if bot_info else ""
+
+    if command:
+        if command.args:
+            query = command.args.strip()
+        else:
+            if message.chat.type in ("group", "supergroup"):
+                await message.answer(
+                    "💡 <b>Guruhda anime qidirish:</b>\n\n"
+                    "Anime nomi yoki kodini buyruqdan keyin yozing:\n"
+                    "Misol: <code>/anime Naruto</code> yoki <code>/kod 15</code>",
+                    parse_mode="HTML"
+                )
+            else:
+                await message.answer(
+                    "💡 Anime qidirish uchun nomini yoki kodini yozing.\n"
+                    "Misol: <code>/anime Naruto</code> yoki <code>15</code>",
+                    parse_mode="HTML"
+                )
+            return
+    else:
+        raw_text = (message.text or message.caption or "").strip()
+        query = raw_text
+
+        # Strip bot username mention if present:
+        # e.g. "@animafundubbot Naruto" -> "Naruto"
+        # e.g. "Naruto @animafundubbot" -> "Naruto"
+        if bot_username:
+            query = re.sub(rf"@{bot_username}\b", "", query, flags=re.IGNORECASE).strip()
+            query = query.lstrip(":,; -").strip()
+
+        # If user only tagged the bot without any query
+        if not query:
+            if message.chat.type in ("group", "supergroup"):
+                await message.answer(
+                    f"👋 <b>Guruhda anime qidirish:</b>\n\n"
+                    f"Bot nomidan so'ng anime nomi yoki kodini yozing:\n"
+                    f"• <code>@{bot_username} Naruto</code>\n"
+                    f"• <code>@{bot_username} 15</code>\n\n"
+                    f"Yoki <code>/anime Naruto</code> buyrug'idan foydalaning.",
+                    parse_mode="HTML"
+                )
+            return
 
     # 1. Exact code match
     anime = await get_anime_by_code(query)
@@ -539,12 +588,19 @@ async def search_or_code_handler(message: Message):
         return
 
     # 3. No match found
-    await message.answer(
-        f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
-        f"💡 Qidiruvda xatolik bo'lmasligi uchun anime nomini yoki kodini tekshiring, yoki katalogdan qidiring.",
-        parse_mode="HTML",
-        reply_markup=search_menu()
-    )
+    if message.chat.type in ("group", "supergroup"):
+        await message.answer(
+            f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
+            f"💡 Anime nomi yoki kodini to'g'ri yozganingizni tekshiring.",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
+            f"💡 Qidiruvda xatolik bo'lmasligi uchun anime nomini yoki kodini tekshiring, yoki katalogdan qidiring.",
+            parse_mode="HTML",
+            reply_markup=search_menu()
+        )
 
 
 # ─── FAVORITES ───────────────────────────────────────────────────────────────

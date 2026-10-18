@@ -29,7 +29,17 @@ class PrivateChatOnlyMiddleware(BaseMiddleware):
                     and event.reply_to_message.from_user.id == bot_info.id
                 )
                 is_command = text.startswith("/")
-                mentions_bot = f"@{bot_username}" in text.lower() if bot_username else False
+                mentions_bot = bool(
+                    (bot_username and f"@{bot_username}" in text.lower())
+                    or any(
+                        e.type == "text_mention" and bot_info and e.user and e.user.id == bot_info.id
+                        for e in (event.entities or [])
+                    )
+                    or any(
+                        e.type == "mention" and bot_username and text[e.offset:e.offset + e.length].lower() == f"@{bot_username}"
+                        for e in (event.entities or [])
+                    )
+                )
 
                 # If not commanded and not mentioned and not replied to bot, ignore
                 if not (is_command or mentions_bot or is_reply_to_bot):
