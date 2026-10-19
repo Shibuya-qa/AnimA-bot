@@ -183,6 +183,8 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
                 ep_num = available_eps[0]
         else:
             ep_num = curr or 1
+    elif available_eps and ep_num not in available_eps:
+        ep_num = available_eps[0]
 
 
     caption = format_anime_card(anime, ep_num)
@@ -430,10 +432,20 @@ async def random_anime_handler(event: Message | CallbackQuery):
             await event.answer(msg)
         return
 
+    # If this anime has sibling parts, find the one for episode 1
+    siblings = await get_animes_by_name(anime["name"])
+    if siblings:
+        for sib in siblings:
+            sib_eps = await get_episodes(sib["id"])
+            if any(e["episode_number"] == 1 for e in sib_eps) or sib.get("current_episode") == 1:
+                anime = sib
+                break
+
     target_msg = event.message if isinstance(event, CallbackQuery) else event
+    user_id = event.from_user.id if event.from_user else 0
     if isinstance(event, CallbackQuery):
         await event.answer("🎲 Siz uchun tasodifiy anime tanlandi!")
-    await deliver_anime(target_msg, anime)
+    await deliver_anime(target_msg, anime, ep_num=1, user_id=user_id)
 
 
 @router.callback_query(F.data == "genres:list")

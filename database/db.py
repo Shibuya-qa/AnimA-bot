@@ -231,11 +231,42 @@ async def search_animes(query: str, limit: int = 20) -> list[dict]:
 
 
 async def get_top_animes(limit: int = 10) -> list[dict]:
+    """
+    Return top animes grouped by name so that sibling parts
+    (e.g. mki1, mki2 … all named 'Mening kichik iblisim') appear
+    as a single entry.  Views and downloads are summed across all parts;
+    rating is averaged.  The representative row is the part with the
+    smallest id (i.e. part-1 / the original entry).
+    """
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("""
-            SELECT * FROM animes 
-            ORDER BY (COALESCE(views, 0) * 2 + COALESCE(downloads, 0) * 3) DESC, id DESC 
+            SELECT
+                a.id,
+                a.code,
+                a.name,
+                a.status,
+                a.total_episodes,
+                a.current_episode,
+                a.translation,
+                a.genres,
+                a.thumbnail_file_id,
+                a.description,
+                a.source_message_id,
+                a.created_at,
+                SUM(COALESCE(g.views, 0))     AS views,
+                SUM(COALESCE(g.downloads, 0)) AS downloads,
+                AVG(COALESCE(g.rating, 5.0))  AS rating,
+                SUM(COALESCE(g.rating_count, 0)) AS rating_count
+            FROM animes a
+            JOIN (
+                -- for every name-group pick the row with the minimum id
+                SELECT name, MIN(id) AS min_id FROM animes GROUP BY name
+            ) rep ON a.id = rep.min_id
+            JOIN animes g ON g.name = a.name   -- aggregate siblings
+            GROUP BY a.name
+            ORDER BY (SUM(COALESCE(g.views, 0)) * 2 + SUM(COALESCE(g.downloads, 0)) * 3) DESC,
+                     a.id DESC
             LIMIT ?
         """, (limit,)) as cursor:
             return [dict(r) for r in await cursor.fetchall()]
