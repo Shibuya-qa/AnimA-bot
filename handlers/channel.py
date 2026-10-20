@@ -12,7 +12,7 @@ router = Router()
 log = logging.getLogger(__name__)
 
 CODE_PATTERN = re.compile(
-    r"anime\s*[ck]odi\s*[:\-]?\s*([a-zA-Z0-9_\-]+)(?:[\s,]+(\d+)(?:\s*[\-\s]*qism)?)?",
+    r"(?:anime\s*)?[ck]od(?:i)?\s*[:\-]?\s*([a-zA-Z0-9_\-]+)(?:[\s,]+(\d+)(?:\s*[\-\s]*qism)?)?",
     re.IGNORECASE
 )
 
@@ -40,12 +40,12 @@ async def channel_post_indexer(message: Message):
     anime = await get_anime_by_code(raw_code)
     code = raw_code
 
-    # If code not found directly, try splitting prefix or dash (e.g. sjs9 -> sjs + ep 9, or 81-4)
+    # If code not found directly, try splitting prefix or dash (e.g. sjs9 -> sjs + ep 9, or n2 -> n1 + ep 2)
     if not anime:
         if "-" in raw_code:
             parts = raw_code.rsplit("-", 1)
             if parts[1].isdigit():
-                possible_anime = await get_anime_by_code(parts[0])
+                possible_anime = await get_anime_by_code(parts[0]) or await get_anime_by_code(f"{parts[0]}1")
                 if possible_anime:
                     anime = possible_anime
                     code = parts[0]
@@ -55,7 +55,7 @@ async def channel_post_indexer(message: Message):
             digit_match = re.search(r"^([a-zA-Z_\-]+)(\d+)$", raw_code)
             if digit_match:
                 prefix, digits = digit_match.group(1), digit_match.group(2)
-                possible_anime = await get_anime_by_code(prefix)
+                possible_anime = await get_anime_by_code(prefix) or await get_anime_by_code(f"{prefix}1")
                 if possible_anime:
                     anime = possible_anime
                     code = prefix
