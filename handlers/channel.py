@@ -29,16 +29,29 @@ async def channel_post_indexer(message: Message):
 
     text = message.caption or message.text or ""
     match = CODE_PATTERN.search(text)
+    
+    anime = None
+    code = ""
+    ep_num = None
+
     if not match:
-        log.info(f"[CHANNEL] no code found in: {text[:80]!r}")
-        return
-
-    raw_code = match.group(1).strip()
-    raw_ep = match.group(2)
-    ep_num = int(raw_ep) if raw_ep else None
-
-    anime = await get_anime_by_code(raw_code)
-    code = raw_code
+        # Fallback: check if caption contains #Naruto or Naruto
+        if "naruto" in text.lower():
+            anime = await get_anime_by_code("n1")
+            if anime:
+                code = "n1"
+                ep_match = re.search(r'\[\s*(\d+)\s*-\s*qism\s*\]|(\d+)\s*-\s*qism|(\d+)\s*qism', text, re.IGNORECASE)
+                if ep_match:
+                    ep_num = int(ep_match.group(1) or ep_match.group(2) or ep_match.group(3))
+        if not anime:
+            log.info(f"[CHANNEL] no code found in: {text[:80]!r}")
+            return
+    else:
+        raw_code = match.group(1).strip()
+        raw_ep = match.group(2)
+        ep_num = int(raw_ep) if raw_ep else None
+        anime = await get_anime_by_code(raw_code)
+        code = raw_code
 
     # If code not found directly, try splitting prefix or dash (e.g. sjs9 -> sjs + ep 9, or n2 -> n1 + ep 2)
     if not anime:
