@@ -17,6 +17,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 async def main():
     await init_db()
+    try:
+        from sync_webapp import sync_animes
+        sync_animes()
+    except Exception as e:
+        logging.warning(f"Webapp ma'lumotlarini sinxronlashda xatolik: {e}")
+
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(

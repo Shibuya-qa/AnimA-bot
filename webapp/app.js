@@ -361,20 +361,40 @@ const DEFAULT_REELS = [
 
 // DATA FETCHING & API INTEGRATION
 async function loadData() {
+  let loaded = false;
+
+  // 1. Try real-time API endpoint (if backend server is reachable)
   try {
     const res = await fetch('/api/animes');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         state.animes = data;
-      } else {
-        state.animes = DEFAULT_ANIMES;
+        loaded = true;
       }
-    } else {
-      state.animes = DEFAULT_ANIMES;
     }
   } catch (err) {
-    console.warn("API serveriga ulanmadi, lokal namunaviy ma'lumotlar yuklandi:", err);
+    // API server not reachable
+  }
+
+  // 2. Load synced database JSON (131 real animes from anime_bot.db on Vercel)
+  if (!loaded) {
+    try {
+      const res = await fetch('data/animes.json?t=' + Date.now());
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          state.animes = data;
+          loaded = true;
+        }
+      }
+    } catch (err) {
+      console.warn("data/animes.json yuklanmadi:", err);
+    }
+  }
+
+  // 3. Fallback to default list if both fail
+  if (!loaded) {
     state.animes = DEFAULT_ANIMES;
   }
 
