@@ -24,7 +24,8 @@
         <div class="brand-logo">
           <div class="mascot-avatar">
             <span class="crown">👑</span>
-            <div class="blob-face">
+            <img src="assets/logo.png" id="sidebarLogoImg" class="brand-logo-img" onerror="this.style.display='none'; document.getElementById('sidebarDefaultBlob').style.display='block';" alt="Logo">
+            <div class="blob-face" id="sidebarDefaultBlob">
               <span class="eye left"></span>
               <span class="eye right"></span>
               <span class="smile"></span>
@@ -90,7 +91,8 @@
           <div class="mobile-brand">
             <div class="mascot-avatar small">
               <span class="crown">👑</span>
-              <div class="blob-face"></div>
+              <img src="assets/logo.png" class="brand-logo-img small" onerror="this.style.display='none'; document.getElementById('mobDefaultBlob').style.display='block';" alt="Logo">
+              <div class="blob-face" id="mobDefaultBlob"></div>
             </div>
             <span class="mobile-brand-name">AnimAfundub</span>
           </div>
@@ -145,11 +147,11 @@
             <div class="hero-content">
               <div class="hero-badge-wrap">
                 <span class="trending-badge">🔥 TRENDDA</span>
-                <span class="hero-genre-tag" id="heroGenre">Jangari • Sarguzasht</span>
+                <span class="hero-genre-tag" id="heroGenre">Jangari • Fantastika • Sehr</span>
               </div>
-              <h1 class="hero-title" id="heroTitle">Qora klever</h1>
+              <h1 class="hero-title" id="heroTitle">Solo Leveling</h1>
               <p class="hero-desc" id="heroDesc">
-                Asta haqida hikoya qiladi va unga sehrgar bo'lmagan holda afsonaviy 5 bargli qora klever grimoire beriladi. Qora buqalar safida Sehrgarlar qiroliga aylanish yo'li!
+                Insoniyatning eng zaif ovchisi Son Jin-Vu halokatli ikki qavatli g'ordan so'ng sirli 'Tizim'ga ega bo'ladi va butun dunyoda yagona darajasi cheksiz o'suvchi Qora Soya Hukmdoriga aylanadi!
               </p>
               <div class="hero-actions">
                 <button class="btn btn-primary" id="heroWatchBtn">
@@ -164,10 +166,10 @@
 
             <div class="hero-poster-preview">
               <div class="poster-card-tilt" id="heroPosterCard">
-                <img src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80" alt="Poster" id="heroPosterImg" class="poster-img">
+                <img src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=700&auto=format&fit=crop&q=85" alt="Poster" id="heroPosterImg" class="poster-img">
                 <div class="poster-glass-badge">
-                  <span class="poster-title-tag" id="heroPosterTag">BLACK CLOVER</span>
-                  <span class="poster-badge-meta">SARGUZASHT</span>
+                  <span class="poster-title-tag" id="heroPosterTag">SOLO LEVELING</span>
+                  <span class="poster-badge-meta">FANTASTIKA</span>
                 </div>
               </div>
             </div>

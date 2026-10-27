@@ -131,6 +131,21 @@ a {
   justify-content: center;
   position: relative;
   box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+  overflow: visible;
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  position: relative;
+  z-index: 1;
+}
+
+.brand-logo-img.small {
+  width: 32px;
+  height: 32px;
 }
 
 .mascot-avatar .crown {
@@ -138,6 +153,7 @@ a {
   top: -10px;
   font-size: 14px;
   transform: rotate(-12deg);
+  z-index: 2;
 }
 
 .blob-face {
