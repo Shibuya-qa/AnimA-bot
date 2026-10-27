@@ -394,12 +394,56 @@ async function loadData() {
     }
   } catch (e) {}
 
+  // Sync User data with Bot Database
+  if (state.tgUser?.id) {
+    try {
+      const uRes = await fetch(`/api/user/${state.tgUser.id}`);
+      if (uRes.ok) {
+        const uData = await uRes.json();
+        if (Array.isArray(uData.favorites)) {
+          state.favorites = new Set(uData.favorites);
+        }
+        if (uData.points !== undefined) {
+          state.userPoints = uData.points;
+        }
+        if (Array.isArray(uData.history) && uData.history.length > 0) {
+          renderHistoryList(uData.history);
+        }
+        syncProfileUI();
+      }
+    } catch (e) {
+      console.warn("User profile sync failed:", e);
+    }
+  }
+
   // Render initial components
   renderHeroBanner();
   renderHomeCards();
   renderCatalog();
   renderFavorites();
   renderCurrentReel();
+}
+
+function renderHistoryList(history) {
+  const card = document.getElementById('historyCard');
+  if (!card) return;
+  if (!history || history.length === 0) {
+    card.innerHTML = '<span class="history-text">Hali tarix bo\'sh.</span>';
+    return;
+  }
+  card.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;text-align:left;">
+      ${history.map(item => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:10px;cursor:pointer;" onclick="openAnimeDetail(${item.id})">
+          <div>
+            <div style="font-weight:700;font-size:13.5px;color:#fff;">${escapeHtml(item.name)}</div>
+            <div style="font-size:11px;color:#94a3b8;">${escapeHtml(item.genres || '')} • Kod: #${item.code}</div>
+          </div>
+          <span style="font-size:11px;color:#38bdf8;font-weight:600;">Tomosha qilingan ›</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 // NAVIGATION / TAB SWITCHING
@@ -728,10 +772,23 @@ function toggleFavorite(event, animeId) {
     showToast("❤️ Sevimlilarga qo'shildi!");
   }
 
-  // Persist
+  // Persist locally
   try {
     localStorage.setItem('shoda_favorites', JSON.stringify([...state.favorites]));
   } catch (e) {}
+
+  // Sync with Bot Database (favorites table)
+  if (state.tgUser?.id) {
+    fetch(`/api/user/${state.tgUser.id}/favorites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anime_id: id })
+    }).then(res => res.json()).then(data => {
+      if (Array.isArray(data.favorites)) {
+        state.favorites = new Set(data.favorites);
+      }
+    }).catch(e => console.warn("Favorite sync failed:", e));
+  }
 
   // Update UI
   renderHomeCards();
@@ -822,13 +879,35 @@ function openAnimeDetail(animeId) {
 
 function playEpisode(anime, epNum) {
   triggerHaptic('heavy');
-  showToast(`🎬 "${anime.name}" ${epNum}-qismi ochilmoqda...`);
+  showToast(`🎬 "${anime.name}" ${epNum}-qismi botda ochilmoqda...`);
 
-  // If in Telegram bot, we can launch the video in chat or deep link
-  if (window.Telegram?.WebApp && anime.code) {
-    // deep link back to bot to receive protected video
-    // tg.openTelegramLink(`https://t.me/your_bot?start=${anime.code}`);
+  // Sync watch history and view counter in bot database
+  if (state.tgUser?.id && anime.id) {
+    fetch(`/api/user/${state.tgUser.id}/history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anime_id: anime.id })
+    }).catch(() => {});
   }
+
+  // Deep-link to Telegram Bot (@animafundubbot) to receive protected episode
+  const botUsername = "animafundubbot";
+  const startArg = anime.code || anime.id;
+  const botUrl = `https://t.me/${botUsername}?start=${startArg}`;
+
+  if (window.Telegram?.WebApp) {
+    const tg = window.Telegram.WebApp;
+    try {
+      tg.openTelegramLink(botUrl);
+      setTimeout(() => {
+        try { tg.close(); } catch (e) {}
+      }, 400);
+      return;
+    } catch (e) {}
+  }
+
+  // Fallback if opened in standard browser
+  window.open(botUrl, '_blank');
 }
 
 function closeModal(modalId) {

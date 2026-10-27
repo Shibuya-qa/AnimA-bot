@@ -151,6 +151,95 @@ async def get_stats(request):
             "online_users": 1
         })
 
+# --- USER PROFILE & BOT DATA SYNCHRONIZATION ---
+
+async def get_user_profile(request):
+    """Fetch user profile, favorites and history synced with bot database"""
+    user_id = int(request.match_info["user_id"])
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        # User basic info
+        async with db.execute("SELECT * FROM users WHERE id = ?", (user_id,)) as u_cur:
+            user_row = await u_cur.fetchone()
+            user_data = dict(user_row) if user_row else {"id": user_id, "full_name": "Foydalanuvchi"}
+
+        # Check admin
+        from config import ADMIN_IDS
+        is_admin = (user_id in ADMIN_IDS)
+        if not is_admin:
+            async with db.execute("SELECT 1 FROM admins WHERE user_id = ?", (user_id,)) as a_cur:
+                is_admin = bool(await a_cur.fetchone())
+        user_data["is_admin"] = is_admin
+
+        # User points & VIP status
+        async with db.execute("SELECT points, is_vip FROM mini_app_user_meta WHERE user_id = ?", (user_id,)) as m_cur:
+            meta = await m_cur.fetchone()
+            user_data["points"] = meta[0] if meta else (999 if is_admin else 0)
+            user_data["is_vip"] = bool(meta[1]) if meta else is_admin
+
+        # Favorites (synced with Bot's favorites table)
+        async with db.execute("SELECT anime_id FROM favorites WHERE user_id = ?", (user_id,)) as f_cur:
+            user_data["favorites"] = [row[0] for row in await f_cur.fetchall()]
+
+        # Watch history (synced with Bot's user_history table)
+        async with db.execute("""
+            SELECT a.id, a.name, a.code, a.genres, a.views, a.rating, h.watched_at
+            FROM user_history h
+            JOIN animes a ON a.id = h.anime_id
+            WHERE h.user_id = ?
+            ORDER BY h.id DESC LIMIT 10
+        """, (user_id,)) as h_cur:
+            user_data["history"] = [dict(r) for r in await h_cur.fetchall()]
+
+        return web.json_response(user_data)
+
+async def toggle_favorite(request):
+    """Sync favorites between Web App and Telegram Bot database"""
+    user_id = int(request.match_info["user_id"])
+    body = await request.json()
+    anime_id = int(body.get("anime_id", 0))
+
+    if not anime_id:
+        return web.json_response({"error": "anime_id required"}, status=400)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Check if exists
+        async with db.execute("SELECT 1 FROM favorites WHERE user_id = ? AND anime_id = ?", (user_id, anime_id)) as cur:
+            exists = bool(await cur.fetchone())
+
+        if exists:
+            await db.execute("DELETE FROM favorites WHERE user_id = ? AND anime_id = ?", (user_id, anime_id))
+            is_fav = False
+        else:
+            await db.execute("INSERT OR IGNORE INTO favorites (user_id, anime_id) VALUES (?, ?)", (user_id, anime_id))
+            is_fav = True
+        await db.commit()
+
+        # Return updated list
+        async with db.execute("SELECT anime_id FROM favorites WHERE user_id = ?", (user_id,)) as f_cur:
+            favs = [row[0] for row in await f_cur.fetchall()]
+
+        return web.json_response({"is_favorite": is_fav, "favorites": favs})
+
+async def add_history(request):
+    """Sync watch history and view counts between Web App and Bot"""
+    user_id = int(request.match_info["user_id"])
+    body = await request.json()
+    anime_id = int(body.get("anime_id", 0))
+
+    if not anime_id:
+        return web.json_response({"error": "anime_id required"}, status=400)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Insert watch history
+        await db.execute("INSERT INTO user_history (user_id, anime_id) VALUES (?, ?)", (user_id, anime_id))
+        # Increment anime view counter in bot database
+        await db.execute("UPDATE animes SET views = COALESCE(views, 0) + 1 WHERE id = ?", (anime_id,))
+        await db.commit()
+
+        return web.json_response({"status": "ok"})
+
 # --- APPLICATION FACTORY ---
 def create_app():
     app = web.Application(middlewares=[cors_middleware])
@@ -161,6 +250,11 @@ def create_app():
     app.router.add_get("/api/chat", get_chat_messages)
     app.router.add_post("/api/chat", post_chat_message)
     app.router.add_get("/api/stats", get_stats)
+
+    # Synced User API
+    app.router.add_get("/api/user/{user_id}", get_user_profile)
+    app.router.add_post("/api/user/{user_id}/favorites", toggle_favorite)
+    app.router.add_post("/api/user/{user_id}/history", add_history)
 
     # Static WebApp UI
     if os.path.exists(WEBAPP_DIR):
