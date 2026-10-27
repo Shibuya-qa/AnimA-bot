@@ -1,0 +1,10 @@
+{
+  "outputDirectory": "webapp",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/webapp/$1"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+requirements.txt
+bot.py
+config.py
+server.py
+anime_bot.db
+database/
+handlers/
+keyboards/
+middlewares/
+utils/
+docs/
