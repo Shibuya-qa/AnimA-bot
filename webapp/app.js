@@ -95,6 +95,13 @@ function syncProfileUI() {
     }
   }
 
+  const isAdmin = (u.id == 5199820118);
+
+  const sidebarStatus = document.querySelector('.user-quick-status');
+  if (sidebarStatus) {
+    sidebarStatus.textContent = isAdmin ? '👑 Bosh Admin' : '💎 Oddiy a\'zo';
+  }
+
   // Profile tab
   const profName = document.getElementById('profileFullName');
   const profUser = document.getElementById('profileUsername');
@@ -106,7 +113,13 @@ function syncProfileUI() {
   if (profName) profName.textContent = u.full_name;
   if (profUser) profUser.textContent = u.username;
   if (profId) profId.textContent = u.id;
-  if (profPoints) profPoints.textContent = state.userPoints;
+  if (profPoints) profPoints.textContent = isAdmin ? (state.userPoints || 999) : state.userPoints;
+
+  // Plan badges in profile
+  const planBadges = document.querySelector('.plan-badges');
+  if (planBadges && isAdmin) {
+    planBadges.innerHTML = '<span class="badge-pill lock" style="background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);">👑 ADMIN</span><span class="badge-pill gray" style="background:rgba(16,185,129,0.2);color:#10b981;border:1px solid rgba(16,185,129,0.4);">FAOL</span>';
+  }
 
   if (profInitials && profAvatar) {
     if (u.photo_url) {
