@@ -1,0 +1,1097 @@
+/**
+ * SHODA ANIME & WEBTOON — TELEGRAM MINI APP LOGIC
+ * Full interactive client matching the UI screenshots
+ */
+
+// STATE MANAGEMENT
+const state = {
+  tgUser: null,
+  activeTab: 'home',
+  mediaType: 'anime', // 'anime' | 'webtoon'
+  catalogType: 'anime',
+  catalogFormat: 'all', // 'all' | 'film' | 'serial'
+  catalogGenre: 'all',
+  catalogStatus: 'all',
+  searchQuery: '',
+  
+  animes: [],
+  reels: [],
+  chatMessages: [],
+  favorites: new Set(),
+  userPoints: 0,
+  
+  currentHeroIndex: 0,
+  currentReelIndex: 0,
+  replyingTo: null
+};
+
+// TELEGRAM WEB APP SDK SETUP
+function initTelegramApp() {
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    
+    // Set theme header color
+    try {
+      tg.setHeaderColor('#0b0e14');
+      tg.setBackgroundColor('#0b0e14');
+    } catch (e) {
+      console.warn("Theme colors could not be set:", e);
+    }
+
+    // Extract user info
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const u = tg.initDataUnsafe.user;
+      state.tgUser = {
+        id: u.id,
+        first_name: u.first_name || '',
+        last_name: u.last_name || '',
+        full_name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'ShoDaShi',
+        username: u.username ? `@${u.username}` : '@Shoxrux_Daminov',
+        photo_url: u.photo_url || ''
+      };
+    }
+  }
+
+  // Fallback user if opened outside Telegram
+  if (!state.tgUser) {
+    state.tgUser = {
+      id: 5199820118,
+      full_name: 'ShoDaShi',
+      username: '@Shoxrux_Daminov',
+      photo_url: ''
+    };
+  }
+
+  // Sync profile UI
+  syncProfileUI();
+}
+
+function triggerHaptic(type = 'light') {
+  if (window.Telegram?.WebApp?.HapticFeedback) {
+    try {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred(type);
+    } catch (e) {}
+  }
+}
+
+// SYNC PROFILE DETAILS
+function syncProfileUI() {
+  const u = state.tgUser;
+  if (!u) return;
+
+  const initials = u.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'SD';
+
+  // Desktop sidebar profile
+  const sidebarName = document.getElementById('sidebarUserName');
+  const sidebarAvatar = document.getElementById('sidebarUserAvatar');
+  if (sidebarName) sidebarName.textContent = u.full_name;
+  if (sidebarAvatar) {
+    if (u.photo_url) {
+      sidebarAvatar.innerHTML = `<img src="${u.photo_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Avatar">`;
+    } else {
+      sidebarAvatar.textContent = initials;
+    }
+  }
+
+  // Profile tab
+  const profName = document.getElementById('profileFullName');
+  const profUser = document.getElementById('profileUsername');
+  const profId = document.getElementById('profileUserId');
+  const profInitials = document.getElementById('profileInitials');
+  const profAvatar = document.getElementById('profileAvatar');
+  const profPoints = document.getElementById('profilePoints');
+
+  if (profName) profName.textContent = u.full_name;
+  if (profUser) profUser.textContent = u.username;
+  if (profId) profId.textContent = u.id;
+  if (profPoints) profPoints.textContent = state.userPoints;
+
+  if (profInitials && profAvatar) {
+    if (u.photo_url) {
+      profAvatar.innerHTML = `<img src="${u.photo_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Avatar">`;
+    } else {
+      profInitials.textContent = initials;
+    }
+  }
+}
+
+// DEFAULT SEED DATA (Used when API is unavailable or offline)
+const DEFAULT_ANIMES = [
+  {
+    id: 1,
+    code: "777",
+    name: "Qora klever (Black Clover)",
+    status: "Davom etmoqda",
+    genres: "Jangari, Sarguzasht, Sehr, Fantastika",
+    rating: 4.9,
+    views: 14820,
+    translation: "O'zbekcha (AnimAfundub)",
+    episodes: 170,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80",
+    description: "Asta sehr kuchi yo'q bo'lgan dunyoda tug'ilgan yagona yigit. Biroq u o'z maqsadi — Sehrgarlar Qiroli bo'lish yo'lida 5 bargli qora klever anti-sehr grimoirini qo'lga kiritadi!"
+  },
+  {
+    id: 2,
+    code: "101",
+    name: "One Piece",
+    status: "Davom etmoqda",
+    genres: "Jangari, Sarguzasht, Komediya",
+    rating: 5.0,
+    views: 32500,
+    translation: "O'zbekcha",
+    episodes: 1100,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80",
+    description: "Monkey D. Luffy va uning Straw Hat jamoasi afsonaviy xazina 'One Piece'ni topish va Qaroqchilar Qiroli bo'lish uchun Grand Line bo'ylab suzishadi."
+  },
+  {
+    id: 3,
+    code: "205",
+    name: "Cyberpunk: Edgerunners",
+    status: "Tugallangan",
+    genres: "Ekshen, Drama, Fantastika",
+    rating: 4.8,
+    views: 9400,
+    translation: "O'zbekcha",
+    episodes: 10,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80",
+    description: "Night City shahrida texnologiya va tana modifikatsiyasiga mukkasidan ketgan dunyoda tirik qolishga urinayotgan ko'cha bolasi Devidning taqdiri."
+  },
+  {
+    id: 4,
+    code: "312",
+    name: "Tokio qasoskorlari (Tokyo Revengers)",
+    status: "Tugallangan",
+    genres: "Jangari, Fantastika, Maktab, Drama",
+    rating: 4.7,
+    views: 18200,
+    translation: "O'zbekcha",
+    episodes: 24,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80",
+    description: "Takemichi Hanagaki o'tmishga 12 yil orqaga qaytib, sevgilisini qutqarish va Tokyo Manji to'dasining kelajagini o'zgartirish uchun kurashadi."
+  },
+  {
+    id: 5,
+    code: "404",
+    name: "Moviy iblis ovchilari (Blue Exorcist)",
+    status: "Tugallangan",
+    genres: "Fantastik sehr, Jangari, Shonen",
+    rating: 4.6,
+    views: 8900,
+    translation: "O'zbekcha",
+    episodes: 25,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80",
+    description: "Rin Okumura Shaytonning o'g'li ekanligini bilib oladi, ammo o'z otasini mag'lub etish uchun Iblis ovchisi bo'lishga qasamyod qiladi."
+  },
+  {
+    id: 6,
+    code: "510",
+    name: "Kod Gias: Leloushning isyoni",
+    status: "Tugallangan",
+    genres: "Detektiv, Drama, Fantastika, Harbiy",
+    rating: 5.0,
+    views: 24100,
+    translation: "O'zbekcha",
+    episodes: 25,
+    type: "serial",
+    is_vip: true,
+    poster: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80",
+    description: "Buyuk Britaniya imperiyasiga qarshi isyon boshlash uchun Lelouch Lamperouge Geass deb nomlangan mutlaq itoat kuchiga ega bo'ladi."
+  },
+  {
+    id: 7,
+    code: "612",
+    name: "Seni juda sevadigan 100 ta qiz",
+    status: "Davom etmoqda",
+    genres: "Romantika, Komediya, Maktab",
+    rating: 4.5,
+    views: 11200,
+    translation: "O'zbekcha",
+    episodes: 12,
+    type: "serial",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+    description: "Rentaro Aijo o'rta maktabda 100 ta qiz uning taqdiriy yori ekanligini va agar ularni sevmasa, fojia yuz berishini bilib oladi!"
+  },
+  {
+    id: 8,
+    code: "820",
+    name: "Suzume eshiklarni yopmoqda (Suzume no Tojimari)",
+    status: "Tugallangan",
+    genres: "Fantastika, Drama, Sarguzasht",
+    rating: 4.9,
+    views: 19800,
+    translation: "O'zbekcha",
+    episodes: 1,
+    type: "film",
+    is_vip: false,
+    poster: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
+    description: "Makoto Shinkayning durdona to'liq metrajli filmi. Butun Yaponiya bo'ylab tabiiy ofatlar olib kelayotgan sehrli eshiklarni yopish safari."
+  }
+];
+
+const DEFAULT_REELS = [
+  {
+    id: 1,
+    title: "Erimni qanday qilib o'z tomonimga og'dirsam bo'ladi",
+    creator: "Nagasera Webtoon",
+    verified: true,
+    tags: "Romantika. Isekai. Drama. Fantastika. Siyosiy Intriga",
+    likes: 128,
+    comments: 14,
+    views: 2420,
+    is_liked: false,
+    is_following: true,
+    cta_text: "O'QISH",
+    media_url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    id: 2,
+    title: "Solo Leveling — Qora Soya Hukmdori uyg'onishi",
+    creator: "Daminov Anime",
+    verified: true,
+    tags: "Jangari. Manhwa. Sehr. Qaytish",
+    likes: 542,
+    comments: 48,
+    views: 9810,
+    is_liked: true,
+    is_following: false,
+    cta_text: "TOMOSHA QILISH",
+    media_url: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&auto=format&fit=crop&q=80"
+  },
+  {
+    id: 3,
+    title: "Sehrgarlar Qirolligi va Asta ning so'nggi jangi",
+    creator: "AnimAfundub TV",
+    verified: true,
+    tags: "Anime. Shonen. Ekshen. Grimoire",
+    likes: 890,
+    comments: 92,
+    views: 15400,
+    is_liked: false,
+    is_following: true,
+    cta_text: "TOMOSHA QILISH",
+    media_url: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&auto=format&fit=crop&q=80"
+  }
+];
+
+// DATA FETCHING & API INTEGRATION
+async function loadData() {
+  try {
+    const res = await fetch('/api/animes');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        state.animes = data;
+      } else {
+        state.animes = DEFAULT_ANIMES;
+      }
+    } else {
+      state.animes = DEFAULT_ANIMES;
+    }
+  } catch (err) {
+    console.warn("API serveriga ulanmadi, lokal namunaviy ma'lumotlar yuklandi:", err);
+    state.animes = DEFAULT_ANIMES;
+  }
+
+  // Load reels
+  state.reels = DEFAULT_REELS;
+
+  // Load saved favorites from localStorage
+  try {
+    const savedFavs = localStorage.getItem('shoda_favorites');
+    if (savedFavs) {
+      const arr = JSON.parse(savedFavs);
+      state.favorites = new Set(arr);
+    }
+    const savedPoints = localStorage.getItem('shoda_points');
+    if (savedPoints) {
+      state.userPoints = parseInt(savedPoints, 10) || 0;
+    }
+  } catch (e) {}
+
+  // Render initial components
+  renderHeroBanner();
+  renderHomeCards();
+  renderCatalog();
+  renderFavorites();
+  renderCurrentReel();
+}
+
+// NAVIGATION / TAB SWITCHING
+function switchTab(tabId) {
+  triggerHaptic('light');
+  state.activeTab = tabId;
+
+  // Update Sidebar buttons
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+
+  // Update Mobile nav buttons
+  document.querySelectorAll('.mobile-bottom-nav .mob-nav-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+
+  // Update Tab Panes
+  document.querySelectorAll('.tab-pane').forEach(pane => {
+    pane.classList.remove('active');
+  });
+  const targetPane = document.getElementById(`tab-${tabId}`);
+  if (targetPane) {
+    targetPane.classList.add('active');
+  }
+
+  // Scroll to top
+  const viewport = document.querySelector('.content-viewport');
+  if (viewport) viewport.scrollTop = 0;
+
+  // Re-render favorites if active
+  if (tabId === 'favorites') {
+    renderFavorites();
+  }
+}
+
+// 1. HOME TAB: HERO BANNER
+function renderHeroBanner() {
+  const current = state.animes[state.currentHeroIndex] || state.animes[0];
+  if (!current) return;
+
+  const heroGenre = document.getElementById('heroGenre');
+  const heroTitle = document.getElementById('heroTitle');
+  const heroDesc = document.getElementById('heroDesc');
+  const heroPosterImg = document.getElementById('heroPosterImg');
+  const heroPosterTag = document.getElementById('heroPosterTag');
+  const heroFavBtn = document.getElementById('heroFavBtn');
+  const heroBackdrop = document.getElementById('heroBackdrop');
+
+  if (heroGenre) heroGenre.textContent = current.genres || 'Jangari • Sarguzasht';
+  if (heroTitle) heroTitle.textContent = current.name;
+  if (heroDesc) heroDesc.textContent = current.description;
+  if (heroPosterImg) heroPosterImg.src = current.poster || DEFAULT_ANIMES[0].poster;
+  if (heroPosterTag) heroPosterTag.textContent = current.name.toUpperCase();
+  if (heroBackdrop && current.poster) {
+    heroBackdrop.style.backgroundImage = `url('${current.poster}')`;
+  }
+
+  const isFav = state.favorites.has(current.id);
+  if (heroFavBtn) {
+    heroFavBtn.innerHTML = isFav ? '❤️' : '+';
+    heroFavBtn.style.color = isFav ? '#ef4444' : '#ffffff';
+  }
+
+  // Update dots
+  const dotsContainer = document.getElementById('heroDots');
+  if (dotsContainer) {
+    dotsContainer.innerHTML = '';
+    const totalDots = Math.min(state.animes.length, 5);
+    for (let i = 0; i < totalDots; i++) {
+      const dot = document.createElement('span');
+      dot.className = `dot ${i === state.currentHeroIndex ? 'active' : ''}`;
+      dot.onclick = () => {
+        state.currentHeroIndex = i;
+        renderHeroBanner();
+      };
+      dotsContainer.appendChild(dot);
+    }
+  }
+}
+
+function nextHero() {
+  state.currentHeroIndex = (state.currentHeroIndex + 1) % Math.min(state.animes.length, 5);
+  renderHeroBanner();
+}
+
+function prevHero() {
+  state.currentHeroIndex = (state.currentHeroIndex - 1 + Math.min(state.animes.length, 5)) % Math.min(state.animes.length, 5);
+  renderHeroBanner();
+}
+
+// 1. HOME TAB: SECTIONS
+function renderHomeCards() {
+  const recentGrid = document.getElementById('recentCardsGrid');
+  const topGrid = document.getElementById('topCardsGrid');
+
+  if (recentGrid) {
+    recentGrid.innerHTML = state.animes.slice(0, 4).map(anime => createAnimeCardHtml(anime)).join('');
+  }
+  if (topGrid) {
+    // Sort by rating or views
+    const sorted = [...state.animes].sort((a, b) => (b.views || 0) - (a.views || 0));
+    topGrid.innerHTML = sorted.slice(0, 4).map(anime => createAnimeCardHtml(anime)).join('');
+  }
+}
+
+// CARD HTML BUILDER
+function createAnimeCardHtml(anime) {
+  const isFav = state.favorites.has(anime.id);
+  const badgeClass = anime.is_vip ? 'vip' : 'bepul';
+  const badgeText = anime.is_vip ? 'VIP' : 'Bepul';
+  const rating = (anime.rating || 5.0).toFixed(1);
+
+  return `
+    <div class="anime-card" onclick="openAnimeDetail(${anime.id})">
+      <div class="anime-card-media">
+        <span class="badge-tag ${badgeClass}">${badgeText}</span>
+        <button class="card-fav-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, ${anime.id})">
+          ${isFav ? '❤️' : '🤍'}
+        </button>
+        <img src="${anime.poster || DEFAULT_ANIMES[0].poster}" alt="${anime.name}" class="anime-card-img" loading="lazy">
+      </div>
+      <div class="anime-card-info">
+        <h4 class="anime-card-title">${anime.name}</h4>
+        <p class="anime-card-genre">${anime.genres || 'Anime'}</p>
+        <div class="anime-card-meta">
+          <span class="card-rating">⭐ ${rating}</span>
+          <span class="card-views">👁 ${anime.views || 0}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 2. KATALOG (CATALOG) FILTERING & RENDERING
+function renderCatalog() {
+  const grid = document.getElementById('catalogCardsGrid');
+  const empty = document.getElementById('catalogEmptyState');
+  const countEl = document.getElementById('catalogResultsCount');
+  if (!grid) return;
+
+  const query = state.searchQuery.toLowerCase().trim();
+
+  const filtered = state.animes.filter(a => {
+    // Query search
+    if (query) {
+      const matchName = a.name.toLowerCase().includes(query);
+      const matchGenre = (a.genres || '').toLowerCase().includes(query);
+      const matchCode = (a.code || '').toLowerCase().includes(query);
+      if (!matchName && !matchGenre && !matchCode) return false;
+    }
+
+    // Format filter: all | film | serial
+    if (state.catalogFormat !== 'all') {
+      if (a.type && a.type !== state.catalogFormat) return false;
+    }
+
+    // Genre filter
+    if (state.catalogGenre !== 'all') {
+      if (!(a.genres || '').includes(state.catalogGenre)) return false;
+    }
+
+    // Status / Access filter
+    if (state.catalogStatus !== 'all') {
+      if (state.catalogStatus === 'VIP' && !a.is_vip) return false;
+      if (state.catalogStatus === 'Bepul' && a.is_vip) return false;
+      if (state.catalogStatus === 'Davom etmoqda' && a.status !== 'Davom etmoqda') return false;
+      if (state.catalogStatus === 'Tugallangan' && a.status !== 'Tugallangan') return false;
+    }
+
+    return true;
+  });
+
+  if (countEl) countEl.textContent = `${filtered.length} ta anime`;
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+  } else {
+    if (empty) empty.style.display = 'none';
+    grid.innerHTML = filtered.map(a => createAnimeCardHtml(a)).join('');
+  }
+}
+
+// 3. LENTA (REELS / SHORTS)
+function renderCurrentReel() {
+  const reel = state.reels[state.currentReelIndex];
+  if (!reel) return;
+
+  const mediaImg = document.getElementById('reelMediaImg');
+  const title = document.getElementById('reelTitle');
+  const tags = document.getElementById('reelTagsSub');
+  const creator = document.getElementById('reelCreatorName');
+  const likeBtn = document.getElementById('reelLikeBtn');
+  const likeCount = document.getElementById('reelLikeCount');
+  const commentCount = document.getElementById('reelCommentCount');
+  const viewCount = document.getElementById('reelViewCount');
+  const followBtn = document.getElementById('reelFollowBtn');
+  const ctaText = document.getElementById('reelCtaText');
+
+  if (mediaImg) mediaImg.src = reel.media_url;
+  if (title) title.textContent = reel.title;
+  if (tags) tags.textContent = reel.tags;
+  if (creator) creator.textContent = reel.creator;
+  if (likeCount) likeCount.textContent = reel.likes;
+  if (commentCount) commentCount.textContent = reel.comments;
+  if (viewCount) viewCount.textContent = reel.views;
+  if (ctaText) ctaText.textContent = reel.cta_text || "O'QISH";
+
+  if (likeBtn) {
+    likeBtn.classList.toggle('liked', reel.is_liked);
+    likeBtn.querySelector('.heart-icon').textContent = reel.is_liked ? '❤️' : '🤍';
+  }
+
+  if (followBtn) {
+    followBtn.textContent = reel.is_following ? '✓ Obunadasiz' : '+ Obuna bo\'lish';
+  }
+}
+
+function nextReel() {
+  triggerHaptic('medium');
+  state.currentReelIndex = (state.currentReelIndex + 1) % state.reels.length;
+  renderCurrentReel();
+}
+
+function prevReel() {
+  triggerHaptic('medium');
+  state.currentReelIndex = (state.currentReelIndex - 1 + state.reels.length) % state.reels.length;
+  renderCurrentReel();
+}
+
+// 4. CHAT FUNCTIONS
+function prepareReply(user, snippet) {
+  triggerHaptic('light');
+  state.replyingTo = { user, snippet };
+  const bar = document.getElementById('replyPreviewBar');
+  const uEl = document.getElementById('replyToUser');
+  const sEl = document.getElementById('replyToSnippet');
+  if (bar && uEl && sEl) {
+    uEl.textContent = user;
+    sEl.textContent = snippet.length > 30 ? snippet.substring(0, 30) + '...' : snippet;
+    bar.style.display = 'flex';
+  }
+  const input = document.getElementById('chatMessageInput');
+  if (input) input.focus();
+}
+
+function cancelReply() {
+  state.replyingTo = null;
+  const bar = document.getElementById('replyPreviewBar');
+  if (bar) bar.style.display = 'none';
+}
+
+function handleSendMessage(e) {
+  e.preventDefault();
+  const input = document.getElementById('chatMessageInput');
+  const text = (input ? input.value : '').trim();
+  if (!text) return;
+
+  triggerHaptic('medium');
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const container = document.getElementById('chatMessagesContainer');
+  if (container) {
+    const initials = (state.tgUser?.full_name || 'U').substring(0, 2).toUpperCase();
+    const replySnippet = state.replyingTo 
+      ? `<div style="font-size:11px;color:#38bdf8;margin-bottom:3px;border-left:2px solid #38bdf8;padding-left:6px;">↪ ${state.replyingTo.user}: ${state.replyingTo.snippet}</div>` 
+      : '';
+
+    const newMsgHtml = `
+      <div class="chat-message-item" style="animation: fadeIn 0.2s ease;">
+        <div class="msg-avatar user">${initials}</div>
+        <div class="msg-body">
+          <div class="msg-top">
+            <span class="msg-author">${state.tgUser?.full_name || 'Foydalanuvchi'}</span>
+            <span class="msg-time">${timeStr}</span>
+          </div>
+          <div class="msg-bubble">
+            ${replySnippet}
+            <p class="msg-text">${escapeHtml(text)}</p>
+          </div>
+          <div class="msg-actions">
+            <button class="reply-btn" onclick="prepareReply('${state.tgUser?.full_name}', '${escapeHtml(text)}')">↩ Javob berish</button>
+            <div class="msg-reactions">
+              <button class="react-btn">❤️</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.insertAdjacentHTML('beforeend', newMsgHtml);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // Clear input & reply
+  if (input) input.value = '';
+  cancelReply();
+
+  // Try posting to API
+  try {
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: state.tgUser?.id,
+        user_name: state.tgUser?.full_name,
+        message: text
+      })
+    }).catch(() => {});
+  } catch (err) {}
+}
+
+// 5. FAVORITES MANAGEMENT
+function toggleFavorite(event, animeId) {
+  if (event) event.stopPropagation();
+  triggerHaptic('light');
+
+  const id = parseInt(animeId, 10);
+  if (state.favorites.has(id)) {
+    state.favorites.delete(id);
+    showToast("Sevimlilardan olib tashlandi");
+  } else {
+    state.favorites.add(id);
+    showToast("❤️ Sevimlilarga qo'shildi!");
+  }
+
+  // Persist
+  try {
+    localStorage.setItem('shoda_favorites', JSON.stringify([...state.favorites]));
+  } catch (e) {}
+
+  // Update UI
+  renderHomeCards();
+  renderCatalog();
+  renderHeroBanner();
+  renderFavorites();
+}
+
+function renderFavorites() {
+  const grid = document.getElementById('favoritesGrid');
+  const empty = document.getElementById('favoritesEmptyState');
+  const countEl = document.getElementById('favCountText');
+  if (!grid) return;
+
+  const favAnimes = state.animes.filter(a => state.favorites.has(a.id));
+  if (countEl) countEl.textContent = `${favAnimes.length} ta saqlangan`;
+
+  if (favAnimes.length === 0) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+  } else {
+    if (empty) empty.style.display = 'none';
+    grid.innerHTML = favAnimes.map(a => createAnimeCardHtml(a)).join('');
+  }
+}
+
+// ANIME DETAIL MODAL
+function openAnimeDetail(animeId) {
+  triggerHaptic('medium');
+  const anime = state.animes.find(a => a.id === animeId);
+  if (!anime) return;
+
+  const modal = document.getElementById('animeDetailModal');
+  const cover = document.getElementById('modalAnimeCover');
+  const title = document.getElementById('modalAnimeTitle');
+  const genres = document.getElementById('modalAnimeGenres');
+  const status = document.getElementById('modalAnimeStatus');
+  const rating = document.getElementById('modalAnimeRating');
+  const code = document.getElementById('modalAnimeCode');
+  const translation = document.getElementById('modalAnimeTranslation');
+  const epCount = document.getElementById('modalAnimeEpisodesCount');
+  const views = document.getElementById('modalAnimeViews');
+  const desc = document.getElementById('modalAnimeDesc');
+  const epGrid = document.getElementById('modalEpisodesGrid');
+  const favBtn = document.getElementById('modalToggleFavBtn');
+  const watchFirst = document.getElementById('modalWatchFirstBtn');
+
+  if (cover) cover.src = anime.poster || DEFAULT_ANIMES[0].poster;
+  if (title) title.textContent = anime.name;
+  if (genres) genres.textContent = anime.genres || '';
+  if (status) status.textContent = anime.status || 'Tugallangan';
+  if (rating) rating.textContent = `⭐ ${(anime.rating || 5.0).toFixed(1)}`;
+  if (code) code.textContent = `#${anime.code || anime.id}`;
+  if (translation) translation.textContent = anime.translation || "O'zbekcha";
+  if (epCount) epCount.textContent = `${anime.episodes || 1} qism`;
+  if (views) views.textContent = anime.views || 0;
+  if (desc) desc.textContent = anime.description || "Ushbu anime haqida ma'lumot tez orada joylanadi.";
+
+  // Populate episode buttons (1..12 or actual count)
+  if (epGrid) {
+    epGrid.innerHTML = '';
+    const totalEp = Math.max(1, anime.episodes || 12);
+    for (let i = 1; i <= Math.min(totalEp, 24); i++) {
+      const b = document.createElement('button');
+      b.className = 'ep-btn';
+      b.textContent = `${i}-qism`;
+      b.onclick = () => playEpisode(anime, i);
+      epGrid.appendChild(b);
+    }
+  }
+
+  // Favorite button
+  const isFav = state.favorites.has(anime.id);
+  if (favBtn) {
+    favBtn.textContent = isFav ? "💔 Sevimlilardan o'chirish" : "❤️ Sevimlilarga qo'shish";
+    favBtn.onclick = () => {
+      toggleFavorite(null, anime.id);
+      openAnimeDetail(anime.id);
+    };
+  }
+
+  if (watchFirst) {
+    watchFirst.onclick = () => playEpisode(anime, 1);
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function playEpisode(anime, epNum) {
+  triggerHaptic('heavy');
+  showToast(`🎬 "${anime.name}" ${epNum}-qismi ochilmoqda...`);
+
+  // If in Telegram bot, we can launch the video in chat or deep link
+  if (window.Telegram?.WebApp && anime.code) {
+    // deep link back to bot to receive protected video
+    // tg.openTelegramLink(`https://t.me/your_bot?start=${anime.code}`);
+  }
+}
+
+function closeModal(modalId) {
+  const m = document.getElementById(modalId);
+  if (m) m.style.display = 'none';
+}
+
+// TOAST HELPER
+let toastTimeout;
+function showToast(message) {
+  const box = document.getElementById('toastBox');
+  const msg = document.getElementById('toastMsg');
+  if (!box || !msg) return;
+
+  msg.textContent = message;
+  box.classList.add('show');
+
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    box.classList.remove('show');
+  }, 2400);
+}
+
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// EVENT LISTENERS & INITIALIZATION
+document.addEventListener('DOMContentLoaded', () => {
+  initTelegramApp();
+  loadData();
+
+  // Navigation tab clicks (Sidebar)
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // Navigation tab clicks (Mobile bottom nav)
+  document.querySelectorAll('.mobile-bottom-nav .mob-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // Quick profile click in sidebar
+  const sidebarProf = document.getElementById('sidebarUserProfileBtn');
+  if (sidebarProf) {
+    sidebarProf.addEventListener('click', () => switchTab('profile'));
+  }
+
+  // Media Type Switcher (ANIME / WEBTOON)
+  document.querySelectorAll('.type-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      triggerHaptic('light');
+      const type = btn.dataset.type || btn.dataset.catType;
+      document.querySelectorAll('.type-switch-btn').forEach(b => {
+        if (b.dataset.type === type || b.dataset.catType === type) {
+          b.classList.add('active');
+        } else {
+          b.classList.remove('active');
+        }
+      });
+      state.mediaType = type;
+      showToast(`${type.toUpperCase()} bo'limi tanlandi`);
+    });
+  });
+
+  // Hero controls
+  const heroNext = document.getElementById('heroNextBtn');
+  const heroPrev = document.getElementById('heroPrevBtn');
+  const heroWatch = document.getElementById('heroWatchBtn');
+  const heroFav = document.getElementById('heroFavBtn');
+
+  if (heroNext) heroNext.addEventListener('click', nextHero);
+  if (heroPrev) heroPrev.addEventListener('click', prevHero);
+  if (heroWatch) heroWatch.addEventListener('click', () => {
+    const cur = state.animes[state.currentHeroIndex];
+    if (cur) openAnimeDetail(cur.id);
+  });
+  if (heroFav) heroFav.addEventListener('click', () => {
+    const cur = state.animes[state.currentHeroIndex];
+    if (cur) toggleFavorite(null, cur.id);
+  });
+
+  // Search Inputs (Top header & Catalog)
+  const globalSearch = document.getElementById('globalSearchInput');
+  const catSearch = document.getElementById('catalogSearchInput');
+  const clearBtn = document.getElementById('clearSearchBtn');
+
+  function handleSearch(val) {
+    state.searchQuery = val;
+    if (globalSearch && globalSearch.value !== val) globalSearch.value = val;
+    if (catSearch && catSearch.value !== val) catSearch.value = val;
+    if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
+
+    if (state.activeTab !== 'catalog' && val) {
+      switchTab('catalog');
+    }
+    renderCatalog();
+  }
+
+  if (globalSearch) {
+    globalSearch.addEventListener('input', e => handleSearch(e.target.value));
+  }
+  if (catSearch) {
+    catSearch.addEventListener('input', e => handleSearch(e.target.value));
+  }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => handleSearch(''));
+  }
+
+  // Catalog Format Pills (Hammasi / Filmlar / Seriallar)
+  document.querySelectorAll('.format-pills .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      triggerHaptic('light');
+      document.querySelectorAll('.format-pills .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.catalogFormat = btn.dataset.format;
+      renderCatalog();
+    });
+  });
+
+  // Catalog Genre Pills
+  document.querySelectorAll('.genre-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      triggerHaptic('light');
+      document.querySelectorAll('.genre-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.catalogGenre = btn.dataset.genre;
+      renderCatalog();
+    });
+  });
+
+  // Catalog Status Pills
+  document.querySelectorAll('.status-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      triggerHaptic('light');
+      document.querySelectorAll('.status-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.catalogStatus = btn.dataset.status;
+      renderCatalog();
+    });
+  });
+
+  // Reset Filters
+  const resetBtn = document.getElementById('resetFiltersBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      handleSearch('');
+      state.catalogFormat = 'all';
+      state.catalogGenre = 'all';
+      state.catalogStatus = 'all';
+      document.querySelectorAll('.genre-pill, .status-pill, .format-pills .pill-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.genre === 'all' || b.dataset.status === 'all' || b.dataset.format === 'all');
+      });
+      renderCatalog();
+    });
+  }
+
+  // See all buttons in home
+  document.querySelectorAll('.see-all-btn').forEach(b => {
+    b.addEventListener('click', () => switchTab('catalog'));
+  });
+
+  // Reels Controls
+  const reelLike = document.getElementById('reelLikeBtn');
+  const reelFollow = document.getElementById('reelFollowBtn');
+  const reelShare = document.getElementById('reelShareBtn');
+  const reelRead = document.getElementById('reelReadBtn');
+  const reelNextBtn = document.getElementById('reelNextBtn');
+  const reelPrevBtn = document.getElementById('reelPrevBtn');
+
+  if (reelLike) {
+    reelLike.addEventListener('click', () => {
+      triggerHaptic('medium');
+      const r = state.reels[state.currentReelIndex];
+      if (r) {
+        r.is_liked = !r.is_liked;
+        r.likes += r.is_liked ? 1 : -1;
+        renderCurrentReel();
+      }
+    });
+  }
+
+  if (reelFollow) {
+    reelFollow.addEventListener('click', () => {
+      triggerHaptic('light');
+      const r = state.reels[state.currentReelIndex];
+      if (r) {
+        r.is_following = !r.is_following;
+        showToast(r.is_following ? "Obuna bo'lindi!" : "Obuna bekor qilindi");
+        renderCurrentReel();
+      }
+    });
+  }
+
+  if (reelShare) {
+    reelShare.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href);
+        showToast("Havola nusxalandi!");
+      } else {
+        showToast("Ulashish muvaffaqiyatli!");
+      }
+    });
+  }
+
+  if (reelRead) {
+    reelRead.addEventListener('click', () => {
+      triggerHaptic('heavy');
+      showToast("Webtoon ochilmoqda...");
+    });
+  }
+
+  if (reelNextBtn) reelNextBtn.addEventListener('click', nextReel);
+  if (reelPrevBtn) reelPrevBtn.addEventListener('click', prevReel);
+
+  // Chat Form & Actions
+  const chatForm = document.getElementById('chatForm');
+  if (chatForm) chatForm.addEventListener('submit', handleSendMessage);
+  const cancelReplyBtn = document.getElementById('cancelReplyBtn');
+  if (cancelReplyBtn) cancelReplyBtn.addEventListener('click', cancelReply);
+
+  // Copy User ID in Profile
+  const copyId = document.getElementById('copyIdBtn');
+  if (copyId) {
+    copyId.addEventListener('click', () => {
+      triggerHaptic('light');
+      if (state.tgUser?.id) {
+        navigator.clipboard?.writeText(state.tgUser.id.toString());
+        showToast(`ID nusxalandi: ${state.tgUser.id}`);
+      }
+    });
+  }
+
+  // Profile action modals
+  const promoMenu = document.getElementById('menuPromoCode');
+  if (promoMenu) {
+    promoMenu.addEventListener('click', () => {
+      document.getElementById('promoModal').style.display = 'flex';
+    });
+  }
+
+  const reqMenu = document.getElementById('menuRequestFilm');
+  if (reqMenu) {
+    reqMenu.addEventListener('click', () => {
+      document.getElementById('filmRequestModal').style.display = 'flex';
+    });
+  }
+
+  const verifyCard = document.getElementById('verifyAccountCard');
+  if (verifyCard) {
+    verifyCard.addEventListener('click', () => {
+      document.getElementById('verifyModal').style.display = 'flex';
+    });
+  }
+
+  const premiumBtn = document.getElementById('getPremiumBtn');
+  const premiumMenu = document.getElementById('menuPremiumSub');
+  const openPremium = () => {
+    showToast("👑 Premium obuna: Bot orqali to'lov tizimiga yo'naltirilmoqda...");
+  };
+  if (premiumBtn) premiumBtn.addEventListener('click', openPremium);
+  if (premiumMenu) premiumMenu.addEventListener('click', openPremium);
+
+  const supportMenu = document.getElementById('menuSupport');
+  if (supportMenu) {
+    supportMenu.addEventListener('click', () => {
+      showToast("🎧 Qo'llab-quvvatlash xizmati @admin ga yo'naltirilmoqda");
+    });
+  }
+
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      triggerHaptic('medium');
+      showToast("Hisobdan chiqildi.");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.close();
+      }
+    });
+  }
+
+  // Promo code submit
+  const submitPromo = document.getElementById('submitPromoBtn');
+  if (submitPromo) {
+    submitPromo.addEventListener('click', () => {
+      const code = (document.getElementById('promoCodeInput')?.value || '').trim();
+      if (!code) {
+        showToast("Promo-kodni kiriting!");
+        return;
+      }
+      triggerHaptic('heavy');
+      state.userPoints += 50;
+      localStorage.setItem('shoda_points', state.userPoints.toString());
+      syncProfileUI();
+      closeModal('promoModal');
+      showToast(`Tabriklaymiz! +50 ball berildi. Jami: ${state.userPoints} ball`);
+    });
+  }
+
+  // Film request submit
+  const submitReq = document.getElementById('submitFilmRequestBtn');
+  if (submitReq) {
+    submitReq.addEventListener('click', () => {
+      const film = (document.getElementById('filmRequestInput')?.value || '').trim();
+      if (!film) {
+        showToast("Film nomini kiriting!");
+        return;
+      }
+      triggerHaptic('medium');
+      closeModal('filmRequestModal');
+      showToast("Arizangiz qabul qilindi! Tez orada ko'rib chiqiladi.");
+    });
+  }
+
+  // Verification submit
+  const submitVer = document.getElementById('submitVerifyBtn');
+  if (submitVer) {
+    submitVer.addEventListener('click', () => {
+      triggerHaptic('medium');
+      closeModal('verifyModal');
+      showToast("Arizangiz adminlarga yuborildi!");
+    });
+  }
+
+  // Detail Modal Close
+  const closeDetail = document.getElementById('closeDetailModalBtn');
+  if (closeDetail) {
+    closeDetail.addEventListener('click', () => closeModal('animeDetailModal'));
+  }
+
+  // Close modals when clicking backdrop
+  document.querySelectorAll('.modal-backdrop').forEach(modal => {
+    modal.addEventListener('click', e => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  });
+});

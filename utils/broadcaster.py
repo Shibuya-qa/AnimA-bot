@@ -4,36 +4,73 @@ from config import SOURCE_CHANNEL_ID
 from database.db import get_broadcast_channels
 
 
+import os
+import asyncio
+import logging
+from config import ADMIN_IDS
+from database.db import add_episode, set_source_message_id
+
+log = logging.getLogger(__name__)
+
 CODE_PATTERN = re.compile(r"anime\s*[ck]odi\s*[:\-]?\s*(\w+)", re.IGNORECASE)
 
 
-async def find_source_message(bot: Bot, code: str, search_limit: int = 500) -> int | None:
+async def search_and_link_channel_post(bot: Bot, anime: dict, ep_num: int = 1) -> dict | None:
     """
-    Search SOURCE_CHANNEL_ID for a post whose caption/text contains 'Anime codi: <code>'.
-    Returns message_id or None.
-    Uses forwardable messages via getHistory (offset_id approach).
+    Search SOURCE_CHANNEL_ID for recent posts matching the anime code.
+    If found, saves episode and returns dict(file_id=..., source_message_id=...).
     """
-    if not SOURCE_CHANNEL_ID:
+    src_channel = os.getenv("SOURCE_CHANNEL_ID", SOURCE_CHANNEL_ID)
+    if not src_channel or not ADMIN_IDS:
         return None
 
-    offset_id = 0
-    checked = 0
-    while checked < search_limit:
+    admin_id = ADMIN_IDS[0]
+    code = anime.get("code", "").strip().lower()
+    if not code:
+        return None
+
+    import sqlite3
+    from config import DB_PATH
+    try:
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+        res = cur.execute("SELECT MAX(source_message_id) FROM anime_episodes").fetchone()
+        max_id = (res[0] or 650) if res else 650
+        con.close()
+    except Exception:
+        max_id = 650
+
+    start_id = max_id + 30
+    end_id = max(1, max_id - 70)
+
+    code_regex = re.compile(rf"(?:anime\s*)?[ck]od(?:i)?\s*[:\-]?\s*{re.escape(code)}\b", re.IGNORECASE)
+
+    for msg_id in range(start_id, end_id, -1):
         try:
-            messages = await bot.get_updates()  # can't use this way
+            fwd = await bot.forward_message(
+                chat_id=admin_id,
+                from_chat_id=src_channel,
+                message_id=msg_id,
+                disable_notification=True
+            )
+            text = fwd.caption or fwd.text or ""
+            video_file_id = fwd.video.file_id if fwd.video else ""
+            await bot.delete_message(chat_id=admin_id, message_id=fwd.message_id)
+
+            if code_regex.search(text) or (code in text.lower() and anime.get("name", "").lower() in text.lower()):
+                await add_episode(
+                    anime_id=anime["id"],
+                    episode_number=ep_num,
+                    file_id=video_file_id,
+                    source_message_id=msg_id
+                )
+                await set_source_message_id(anime["code"], msg_id)
+                log.info(f"[AUTO-LINK] Found and linked {code} ep {ep_num} to msg_id {msg_id}")
+                return {"file_id": video_file_id, "source_message_id": msg_id}
         except Exception:
-            break
+            pass
+        await asyncio.sleep(0.04)
 
-    return None
-
-
-async def find_post_in_channel(bot: Bot, code: str) -> int | None:
-    """
-    Bot must be admin in source channel.
-    We iterate channel history via pyrogram-style — but aiogram doesn't support getHistory.
-    So instead: bot listens to channel_post events and indexes them automatically.
-    This function just checks if we already have the message_id stored.
-    """
     return None
 
 

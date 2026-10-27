@@ -8,3 +8,4 @@ ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 SOURCE_CHANNEL_ID = os.getenv("SOURCE_CHANNEL_ID", "")  # kanal where videos are stored
 DB_PATH = "anime_bot.db"
+WEB_APP_URL = os.getenv("WEB_APP_URL", "http://localhost:8080")

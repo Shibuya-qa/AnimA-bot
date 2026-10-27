@@ -1,9 +1,15 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from config import WEB_APP_URL
 
 
 def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
+    # Mini App tugmasi (HTTPS mavjud bo'lganda Telegram WebAppInfo bilan)
+    if WEB_APP_URL and WEB_APP_URL.startswith("https://"):
+        builder.row(
+            KeyboardButton(text="📱 Mini Appni ochish", web_app=WebAppInfo(url=WEB_APP_URL))
+        )
     builder.row(
         KeyboardButton(text="🔍 Qidirish"),
         KeyboardButton(text="🔥 Top Animelar"),
@@ -15,6 +21,15 @@ def main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     if is_admin:
         builder.row(KeyboardButton(text="👑 Admin Panel"))
     return builder.as_markup(resize_keyboard=True)
+
+
+def mini_app_inline_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    if WEB_APP_URL and WEB_APP_URL.startswith("https://"):
+        builder.row(
+            InlineKeyboardButton(text="🚀 Mini Appni ochish", web_app=WebAppInfo(url=WEB_APP_URL))
+        )
+    return builder.as_markup()
 
 
 def search_menu() -> InlineKeyboardMarkup:
@@ -109,6 +124,8 @@ def anime_actions(
     active_ep: int = 1,
     available_episodes: list[int] = None,
     total_episodes: int = 1,
+    current_episode: int = 1,
+    status: str = "",
     page: int = 0,
     anime_code: str = "",
 ) -> InlineKeyboardMarkup:
@@ -116,9 +133,21 @@ def anime_actions(
 
     # Determine episode numbers to show
     if available_episodes:
-        all_eps = available_episodes
+        all_eps = sorted(available_episodes)
     else:
-        max_ep = max(total_episodes, active_ep, 1)
+        curr = current_episode if current_episode and current_episode > 0 else 1
+        tot = total_episodes if total_episodes and total_episodes > 0 else 1
+
+        if status == "Davom etmoqda":
+            max_ep = max(curr, active_ep, 1)
+        elif status == "Tugallangan":
+            max_ep = max(tot, curr, active_ep, 1)
+        else:
+            if curr < tot:
+                max_ep = max(curr, active_ep, 1)
+            else:
+                max_ep = max(tot, active_ep, 1)
+
         all_eps = list(range(1, max_ep + 1))
 
     # Paginate episodes (9 episodes per page)

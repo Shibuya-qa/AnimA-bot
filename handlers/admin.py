@@ -424,6 +424,8 @@ async def add_description(message: Message, state: FSMContext):
     # Search source channel for the post
     status_text = ""
     if SOURCE_CHANNEL_ID:
+        from utils.broadcaster import search_and_link_channel_post
+        asyncio.create_task(search_and_link_channel_post(message.bot, anime, data.get("current_episode", 1)))
         status_text = (
             f"\n\n⏳ Bot manba kanaldan <code>{data['code']}</code> kodli postni qidirmoqda...\n"
             f"Agar post allaqachon kanalda bo'lsa — avtomatik topiladi.\n"

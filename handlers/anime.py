@@ -93,6 +93,17 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
     if not file_id and not msg_id:
         msg_id = anime.get("source_message_id", 0)
 
+    # Auto-healing: if still not found, search the channel for this anime!
+    if not file_id and not msg_id:
+        try:
+            from utils.broadcaster import search_and_link_channel_post
+            found = await search_and_link_channel_post(bot, anime, ep_num)
+            if found:
+                file_id = found.get("file_id", "")
+                msg_id = found.get("source_message_id", 0)
+        except Exception as e:
+            log.error(f"[ANIME] auto-link failed: {e}")
+
     caption_text = f"🎬 <b>{anime['name']}</b> — {ep_num}-qism\n🔑 Kod: <code>{anime['code']}</code>"
 
     if file_id:
@@ -141,6 +152,23 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
 
 
 
+async def get_all_available_episodes(anime: dict) -> list[int]:
+    """Get all available episode numbers for an anime and its siblings."""
+    episodes = await get_episodes(anime["id"])
+    siblings = await get_animes_by_name(anime["name"])
+    sibling_ep_map = {}
+    for sib in siblings:
+        sib_eps = await get_episodes(sib["id"])
+        for ep in sib_eps:
+            en = ep["episode_number"]
+            if en not in sibling_ep_map or (not sibling_ep_map[en].get("file_id") and ep.get("file_id")):
+                sibling_ep_map[en] = ep
+
+    primary_map = {ep["episode_number"]: ep for ep in episodes}
+    merged_map = {**sibling_ep_map, **primary_map}
+    return sorted(merged_map.keys())
+
+
 async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0, user_id: int = None):
     """Send anime card then send video for selected episode."""
     if user_id is None:
@@ -153,26 +181,7 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
         anime = fresh_anime
 
     # Get episodes from this anime AND all sibling animes with same name
-    episodes = await get_episodes(anime["id"])
-
-    # Also pull episodes from same-name animes (e.g. mki1..mki12 all = "Mening kichik iblisim")
-    siblings = await get_animes_by_name(anime["name"])
-    sibling_ep_map = {}  # ep_number -> best (file_id, source_message_id)
-    for sib in siblings:
-        sib_eps = await get_episodes(sib["id"])
-        for ep in sib_eps:
-            en = ep["episode_number"]
-            if en not in sibling_ep_map:
-                sibling_ep_map[en] = ep
-            else:
-                # prefer entry with file_id
-                if not sibling_ep_map[en].get("file_id") and ep.get("file_id"):
-                    sibling_ep_map[en] = ep
-
-    # Merge with primary episodes
-    primary_map = {ep["episode_number"]: ep for ep in episodes}
-    merged_map = {**sibling_ep_map, **primary_map}  # primary wins
-    available_eps = sorted(merged_map.keys())
+    available_eps = await get_all_available_episodes(anime)
 
     if ep_num is None:
         curr = anime.get("current_episode", 1)
@@ -194,6 +203,8 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
         active_ep=ep_num,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
+        current_episode=anime.get("current_episode", 1),
+        status=anime.get("status", ""),
         page=page,
         anime_code=anime.get("code", ""),
     )
@@ -227,8 +238,7 @@ async def episode_click_handler(callback: CallbackQuery):
         return
 
     is_fav = await is_favorite(callback.from_user.id, anime_id)
-    episodes = await get_episodes(anime_id)
-    available_eps = [e["episode_number"] for e in episodes] if episodes else []
+    available_eps = await get_all_available_episodes(anime)
 
     caption = format_anime_card(anime, ep_num)
     kb = anime_actions(
@@ -237,6 +247,8 @@ async def episode_click_handler(callback: CallbackQuery):
         active_ep=ep_num,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
+        current_episode=anime.get("current_episode", 1),
+        status=anime.get("status", ""),
         page=page,
         anime_code=anime.get("code", ""),
     )
@@ -263,8 +275,7 @@ async def episode_page_handler(callback: CallbackQuery):
         return
 
     is_fav = await is_favorite(callback.from_user.id, anime_id)
-    episodes = await get_episodes(anime_id)
-    available_eps = [e["episode_number"] for e in episodes] if episodes else []
+    available_eps = await get_all_available_episodes(anime)
 
     caption = format_anime_card(anime, active_ep)
     kb = anime_actions(
@@ -273,6 +284,8 @@ async def episode_page_handler(callback: CallbackQuery):
         active_ep=active_ep,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
+        current_episode=anime.get("current_episode", 1),
+        status=anime.get("status", ""),
         page=page,
         anime_code=anime.get("code", ""),
     )
@@ -363,8 +376,7 @@ async def do_rate_handler(callback: CallbackQuery):
     anime = await get_anime_by_id(anime_id)
     if anime:
         is_fav = await is_favorite(callback.from_user.id, anime_id)
-        episodes = await get_episodes(anime_id)
-        available_eps = [e["episode_number"] for e in episodes] if episodes else []
+        available_eps = await get_all_available_episodes(anime)
         caption = format_anime_card(anime, active_ep)
         kb = anime_actions(
             anime_id=anime_id,
@@ -372,6 +384,8 @@ async def do_rate_handler(callback: CallbackQuery):
             active_ep=active_ep,
             available_episodes=available_eps,
             total_episodes=anime.get("total_episodes", 1),
+            current_episode=anime.get("current_episode", 1),
+            status=anime.get("status", ""),
             page=page,
             anime_code=anime.get("code", ""),
         )
@@ -636,14 +650,15 @@ async def favorite_handler(callback: CallbackQuery):
 
     anime = await get_anime_by_id(anime_id)
     if anime:
-        episodes = await get_episodes(anime_id)
-        available_eps = [e["episode_number"] for e in episodes] if episodes else []
+        available_eps = await get_all_available_episodes(anime)
         kb = anime_actions(
             anime_id=anime_id,
             is_fav=is_fav,
             active_ep=active_ep,
             available_episodes=available_eps,
             total_episodes=anime.get("total_episodes", 1),
+            current_episode=anime.get("current_episode", 1),
+            status=anime.get("status", ""),
             page=page,
             anime_code=anime.get("code", ""),
         )

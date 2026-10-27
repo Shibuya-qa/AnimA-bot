@@ -43,6 +43,13 @@ async def main():
     from utils.backup import daily_backup_scheduler
     asyncio.create_task(daily_backup_scheduler(bot))
 
+    # ShoDa Mini App veb-serverini ishga tushirish
+    try:
+        from server import run_server
+        asyncio.create_task(run_server(host="0.0.0.0", port=8080))
+    except Exception as e:
+        logging.warning(f"Mini App serverini ishga tushirishda xatolik: {e}")
+
     logging.info("Bot ishga tushdi!")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

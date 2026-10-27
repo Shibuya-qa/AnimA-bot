@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ShoDa Anime & Webtoon — Telegram Mini App</title>
+  
+  <!-- Telegram Web App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <div id="app" class="app-layout">
+    
+    <!-- DESKTOP / TABLET SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <div class="mascot-avatar">
+            <span class="crown">👑</span>
+            <div class="blob-face">
+              <span class="eye left"></span>
+              <span class="eye right"></span>
+              <span class="smile"></span>
+            </div>
+          </div>
+          <div class="brand-info">
+            <span class="brand-title">AnimAfundub</span>
+            <span class="brand-sub">ShoDa Land</span>
+          </div>
+        </div>
+
+        <div class="online-indicator-pill">
+          <span class="pulse-dot"></span>
+          <span id="sidebarOnlineText">1 web appda onlayn</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="home">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">Bosh sahifa</span>
+        </button>
+        <button class="nav-item" data-tab="catalog">
+          <span class="nav-icon">🔍</span>
+          <span class="nav-label">Katalog</span>
+        </button>
+        <button class="nav-item" data-tab="reels">
+          <span class="nav-icon">🔥</span>
+          <span class="nav-label">Lenta (Reels)</span>
+        </button>
+        <button class="nav-item" data-tab="chat">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">Chat</span>
+          <span class="badge" id="chatUnreadBadge">3</span>
+        </button>
+        <button class="nav-item" data-tab="favorites">
+          <span class="nav-icon">❤️</span>
+          <span class="nav-label">Sevimlilar</span>
+        </button>
+        <button class="nav-item" data-tab="profile">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">Profilim</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-quick-profile" id="sidebarUserProfileBtn">
+          <div class="user-avatar-small" id="sidebarUserAvatar">SD</div>
+          <div class="user-quick-info">
+            <span class="user-quick-name" id="sidebarUserName">ShoDaShi</span>
+            <span class="user-quick-status">💎 Oddiy a'zo</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="main-wrapper">
+      
+      <!-- TOP APP HEADER -->
+      <header class="top-header">
+        <div class="header-left">
+          <div class="mobile-brand">
+            <div class="mascot-avatar small">
+              <span class="crown">👑</span>
+              <div class="blob-face"></div>
+            </div>
+            <span class="mobile-brand-name">AnimAfundub</span>
+          </div>
+        </div>
+
+        <div class="header-search-container">
+          <div class="search-input-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="globalSearchInput" placeholder="Anime nomi, janr yoki tili bo'yicha qidirish..." autocomplete="off">
+            <button class="clear-search-btn" id="clearSearchBtn" style="display: none;">✕</button>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <div class="online-pill-header">
+            <span class="pulse-dot"></span>
+            <span id="headerOnlineCount">1 web appda</span>
+          </div>
+          <button class="icon-btn" id="notificationBtn" title="Bildirishnomalar">
+            <span class="icon">🔔</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB CONTENTS -->
+      <main class="content-viewport">
+
+        <!-- 1. BOSH SAHIFA (HOME) -->
+        <section id="tab-home" class="tab-pane active">
+          <!-- MEDIA TYPE SWITCHER (ANIME / WEBTOON) -->
+          <div class="type-switch-wrapper">
+            <div class="type-switch-bar">
+              <button class="type-switch-btn active" data-type="anime">
+                <span class="icon">🎬</span>
+                <span>ANIME</span>
+              </button>
+              <button class="type-switch-btn" data-type="webtoon">
+                <span class="icon">📖</span>
+                <span>WEBTOON</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- TRENDING HERO BANNER -->
+          <div class="hero-trending-card" id="heroBanner">
+            <div class="hero-backdrop" id="heroBackdrop"></div>
+            <div class="hero-overlay"></div>
+            
+            <button class="hero-nav-arrow prev" id="heroPrevBtn" aria-label="Oldingi">‹</button>
+            <button class="hero-nav-arrow next" id="heroNextBtn" aria-label="Keyingi">›</button>
+
+            <div class="hero-content">
+              <div class="hero-badge-wrap">
+                <span class="trending-badge">🔥 TRENDDA</span>
+                <span class="hero-genre-tag" id="heroGenre">Jangari • Sarguzasht</span>
+              </div>
+              <h1 class="hero-title" id="heroTitle">Qora klever</h1>
+              <p class="hero-desc" id="heroDesc">
+                Asta haqida hikoya qiladi va unga sehrgar bo'lmagan holda afsonaviy 5 bargli qora klever grimoire beriladi. Qora buqalar safida Sehrgarlar qiroliga aylanish yo'li!
+              </p>
+              <div class="hero-actions">
+                <button class="btn btn-primary" id="heroWatchBtn">
+                  <span class="btn-icon">▶</span>
+                  <span>Tomosha qilish</span>
+                </button>
+                <button class="btn btn-icon-only" id="heroFavBtn" title="Sevimlilarga qo'shish">
+                  <span class="fav-icon">+</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="hero-poster-preview">
+              <div class="poster-card-tilt" id="heroPosterCard">
+                <img src="https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80" alt="Poster" id="heroPosterImg" class="poster-img">
+                <div class="poster-glass-badge">
+                  <span class="poster-title-tag" id="heroPosterTag">BLACK CLOVER</span>
+                  <span class="poster-badge-meta">SARGUZASHT</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dots -->
+            <div class="hero-dots" id="heroDots">
+              <span class="dot active"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
+
+          <!-- SECTION: YANGI QO'SHILGANLAR -->
+          <div class="section-block">
+            <div class="section-header">
+              <h2 class="section-title">Yangi qo'shilganlar</h2>
+              <button class="see-all-btn" data-target="catalog" data-filter="recent">Barchasi ›</button>
+            </div>
+            <div class="cards-grid" id="recentCardsGrid">
+              <!-- Dynamically rendered -->
+            </div>
+          </div>
+
+          <!-- SECTION: MASHHUR VA ENG KO'P KO'RILGANLAR -->
+          <div class="section-block">
+            <div class="section-header">
+              <h2 class="section-title">🔥 Top Animelar reytingi</h2>
+              <button class="see-all-btn" data-target="catalog" data-filter="top">Barchasi ›</button>
+            </div>
+            <div class="cards-grid" id="topCardsGrid">
+              <!-- Dynamically rendered -->
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. KATALOG (CATALOG) -->
+        <section id="tab-catalog" class="tab-pane">
+          <!-- TYPE SWITCHER IN CATALOG -->
+          <div class="type-switch-wrapper catalog-sub">
+            <div class="type-switch-bar">
+              <button class="type-switch-btn active" data-cat-type="anime">
+                <span class="icon">🎬</span>
+                <span>ANIME</span>
+              </button>
+              <button class="type-switch-btn" data-cat-type="webtoon">
+                <span class="icon">📖</span>
+                <span>WEBTOON</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- SEARCH & FILTER BAR -->
+          <div class="catalog-search-row">
+            <div class="search-input-box wide">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="catalogSearchInput" placeholder="Anime nomi, janr yoki tili bo'yicha qidirish...">
+            </div>
+            <button class="filter-toggle-btn" id="filterToggleBtn" title="Filtrlar">
+              <span>⚙️</span>
+            </button>
+          </div>
+
+          <!-- FORMAT BUTTONS: HAMMASI / FILMLAR / SERIALLAR -->
+          <div class="catalog-filters-group">
+            <div class="pill-group format-pills">
+              <button class="pill-btn active" data-format="all">
+                <span class="icon">🗂</span>
+                <span>Hammasi</span>
+              </button>
+              <button class="pill-btn" data-format="film">
+                <span class="icon">🎬</span>
+                <span>Filmlar</span>
+              </button>
+              <button class="pill-btn" data-format="serial">
+                <span class="icon">📺</span>
+                <span>Seriallar</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- GENRES PILLS -->
+          <div class="pills-scroll-row" id="genresScrollRow">
+            <button class="genre-pill active" data-genre="all">Barchasi</button>
+            <button class="genre-pill" data-genre="Jangari">Jangari</button>
+            <button class="genre-pill" data-genre="Sarguzasht">Sarguzasht</button>
+            <button class="genre-pill" data-genre="Fantastika">Fantastika</button>
+            <button class="genre-pill" data-genre="Komediya">Komediya</button>
+            <button class="genre-pill" data-genre="Romantika">Romantika</button>
+            <button class="genre-pill" data-genre="Drama">Drama</button>
+            <button class="genre-pill" data-genre="Dahshat">Dahshat</button>
+            <button class="genre-pill" data-genre="Detektiv">Detektiv</button>
+            <button class="genre-pill" data-genre="Ecchi">Ecchi</button>
+            <button class="genre-pill" data-genre="Sehr">Sehr</button>
+            <button class="genre-pill" data-genre="Maktab">Maktab</button>
+          </div>
+
+          <!-- STATUS & ACCESS PILLS -->
+          <div class="pills-scroll-row status-row" id="statusScrollRow">
+            <button class="status-pill active" data-status="all">Barchasi</button>
+            <button class="status-pill" data-status="VIP">VIP</button>
+            <button class="status-pill" data-status="Bepul">Bepul</button>
+            <button class="status-pill" data-status="Davom etmoqda">Davom etmoqda</button>
+            <button class="status-pill" data-status="Tugallangan">Tugallangan</button>
+          </div>
+
+          <!-- CATALOG SECTION HEADER & COUNT -->
+          <div class="catalog-results-header">
+            <h2 class="section-title" id="catalogHeading">Barcha animelar</h2>
+            <span class="results-count" id="catalogResultsCount">0 ta anime</span>
+          </div>
+
+          <!-- CATALOG GRID -->
+          <div class="cards-grid catalog-grid" id="catalogCardsGrid">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- EMPTY STATE -->
+          <div class="empty-state" id="catalogEmptyState" style="display: none;">
+            <div class="empty-icon">🔍</div>
+            <h3>Hech narsa topilmadi</h3>
+            <p>Boshqa kalit so'z yoki janrni sinab ko'ring.</p>
+            <button class="btn btn-secondary" id="resetFiltersBtn">Filtrlarni tozalash</button>
+          </div>
+        </section>
+
+        <!-- 3. LENTA (REELS / SHORTS) -->
+        <section id="tab-reels" class="tab-pane">
+          <div class="reels-container">
+            <!-- REELS TOP TAGS -->
+            <div class="reels-tags-bar">
+              <button class="reels-tag active" data-rtag="all">#Barchasi</button>
+              <button class="reels-tag" data-rtag="Manhwa">#Manhwa</button>
+              <button class="reels-tag" data-rtag="Jangari">#Jangari</button>
+              <button class="reels-tag" data-rtag="Romantika">#Romantika</button>
+              <button class="reels-tag" data-rtag="Manga">#Manga</button>
+              <button class="reels-tag" data-rtag="Anime">#Anime</button>
+            </div>
+
+            <!-- REELS VIEWER STACK -->
+            <div class="reels-viewport" id="reelsViewport">
+              <!-- REEL CARD -->
+              <div class="reel-card active" id="currentReelCard">
+                <div class="reel-media-box">
+                  <img src="https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800&auto=format&fit=crop&q=80" alt="Reel Media" id="reelMediaImg" class="reel-media-img">
+                  <div class="reel-media-overlay"></div>
+                </div>
+
+                <!-- RIGHT SIDE ACTIONS (LIKE, COMMENT, VIEW, SHARE) -->
+                <div class="reel-actions-column">
+                  <button class="reel-action-btn" id="reelLikeBtn">
+                    <span class="icon heart-icon">🤍</span>
+                    <span class="action-count" id="reelLikeCount">1</span>
+                  </button>
+                  <button class="reel-action-btn" id="reelCommentBtn">
+                    <span class="icon">💬</span>
+                    <span class="action-count" id="reelCommentCount">0</span>
+                  </button>
+                  <div class="reel-action-btn non-clickable">
+                    <span class="icon">👁</span>
+                    <span class="action-count" id="reelViewCount">1</span>
+                  </div>
+                  <button class="reel-action-btn" id="reelShareBtn">
+                    <span class="icon">↗</span>
+                    <span class="action-label">Uzatish</span>
+                  </button>
+                </div>
+
+                <!-- BOTTOM INFO OVERLAY -->
+                <div class="reel-bottom-info">
+                  <div class="reel-creator-row">
+                    <div class="creator-badge">
+                      <span class="creator-avatar-letter">N</span>
+                      <span class="creator-name" id="reelCreatorName">Nagasera Webtoon</span>
+                      <span class="verified-check">✔</span>
+                    </div>
+                    <button class="follow-pill-btn" id="reelFollowBtn">✓ Obunadasiz</button>
+                  </div>
+
+                  <h3 class="reel-title" id="reelTitle">
+                    Erimni qanday qilib o'z tomonimga og'dirsam bo'ladi
+                  </h3>
+                  <p class="reel-tags-sub" id="reelTagsSub">
+                    Romantika. Isekai. Drama. Fantastika. Siyosiy Intriga
+                  </p>
+
+                  <div class="reel-cta-wrap">
+                    <button class="btn btn-accent-green" id="reelReadBtn">
+                      <span class="btn-icon">📖</span>
+                      <span id="reelCtaText">O'QISH</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- NAVIGATION BUTTONS FOR DESKTOP -->
+                <div class="reel-nav-controls">
+                  <button class="reel-nav-arrow" id="reelPrevBtn" title="Oldingi klip">▲</button>
+                  <button class="reel-nav-arrow" id="reelNextBtn" title="Keyingi klip">▼</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. CHAT (UMUMIY CHAT) -->
+        <section id="tab-chat" class="tab-pane">
+          <div class="chat-app-box">
+            <!-- CHAT HEADER -->
+            <div class="chat-header-bar">
+              <div class="chat-header-info">
+                <div class="chat-icon-badge">💬</div>
+                <div>
+                  <h3 class="chat-room-title">Umumiy Chat</h3>
+                  <p class="chat-room-sub">Barcha foydalanuvchilar bilan suhbatlashing</p>
+                </div>
+              </div>
+              <div class="chat-online-badge">
+                <span class="pulse-dot"></span>
+                <span id="chatOnlineUsers">1 onlayn</span>
+              </div>
+            </div>
+
+            <!-- CHAT MESSAGES STREAM -->
+            <div class="chat-messages-container" id="chatMessagesContainer">
+              <!-- Initial sample messages matching screenshot -->
+              <div class="chat-message-item">
+                <div class="msg-avatar ashiro">A</div>
+                <div class="msg-body">
+                  <div class="msg-top">
+                    <span class="msg-author">ASHIRO</span>
+                    <span class="msg-time">10:03 AM</span>
+                  </div>
+                  <div class="msg-bubble">
+                    <p class="msg-text">web appdagi baglar ko'p qismi bartaraf etildi</p>
+                  </div>
+                  <div class="msg-actions">
+                    <button class="reply-btn" onclick="prepareReply('ASHIRO', 'web appdagi baglar ko\'p qismi bartaraf etildi')">↩ Javob berish</button>
+                    <div class="msg-reactions">
+                      <button class="react-btn">🤍</button>
+                      <button class="react-btn">😄</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chat-message-item">
+                <div class="msg-avatar">M</div>
+                <div class="msg-body">
+                  <div class="msg-top">
+                    <span class="msg-author">M</span>
+                    <span class="msg-time">06:13 PM</span>
+                  </div>
+                  <div class="msg-bubble">
+                    <p class="msg-text">.</p>
+                  </div>
+                  <div class="msg-actions">
+                    <button class="reply-btn" onclick="prepareReply('M', '.')">↩ Javob berish</button>
+                    <div class="msg-reactions">
+                      <button class="react-btn">🤍</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chat-message-item">
+                <div class="msg-avatar user">FO</div>
+                <div class="msg-body">
+                  <div class="msg-top">
+                    <span class="msg-author">Foydalanuvchi</span>
+                    <span class="msg-time">01:54 AM</span>
+                  </div>
+                  <div class="msg-bubble">
+                    <p class="msg-text">Hayirli kech sayt judayam ajoyib ekan</p>
+                  </div>
+                  <div class="msg-actions">
+                    <button class="reply-btn" onclick="prepareReply('Foydalanuvchi', 'Hayirli kech sayt judayam ajoyib ekan')">↩ Javob berish</button>
+                    <div class="msg-reactions">
+                      <button class="react-btn">❤️</button>
+                      <button class="react-btn">🔥</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="chat-message-item">
+                <div class="msg-avatar user">FO</div>
+                <div class="msg-body">
+                  <div class="msg-top">
+                    <span class="msg-author">Foydalanuvchi</span>
+                    <span class="msg-time">11:53 AM</span>
+                  </div>
+                  <div class="msg-bubble">
+                    <p class="msg-text">Salom nega vebtoni o'qib bo'lmayapti</p>
+                  </div>
+                  <div class="msg-actions">
+                    <button class="reply-btn" onclick="prepareReply('Foydalanuvchi', 'Salom nega vebtoni o\'qib bo\'lmayapti')">↩ Javob berish</button>
+                    <div class="msg-reactions">
+                      <button class="react-btn">🤍</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- REPLY PREVIEW BAR -->
+            <div class="reply-preview-bar" id="replyPreviewBar" style="display: none;">
+              <div class="reply-preview-text">
+                <span class="reply-to-user" id="replyToUser">ASHIRO</span>: 
+                <span class="reply-to-snippet" id="replyToSnippet">...</span>
+              </div>
+              <button class="cancel-reply-btn" id="cancelReplyBtn">✕</button>
+            </div>
+
+            <!-- CHAT INPUT BAR -->
+            <form class="chat-input-row" id="chatForm">
+              <button type="button" class="chat-emoji-btn" id="chatEmojiBtn" title="Emoji">😊</button>
+              <input type="text" id="chatMessageInput" placeholder="Xabar yozing..." autocomplete="off">
+              <button type="submit" class="chat-send-btn" id="chatSendBtn" title="Yuborish">
+                <span>➤</span>
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- 5. SEVIMLILAR (FAVORITES) -->
+        <section id="tab-favorites" class="tab-pane">
+          <div class="favorites-header">
+            <h2 class="section-title">❤️ Saqlangan animelar va vebtonlar</h2>
+            <span class="results-count" id="favCountText">0 ta saqlangan</span>
+          </div>
+
+          <div class="cards-grid" id="favoritesGrid">
+            <!-- Dynamically populated -->
+          </div>
+
+          <div class="empty-state" id="favoritesEmptyState">
+            <div class="empty-icon">💔</div>
+            <h3>Hozircha sevimlilar ro'yxati bo'sh</h3>
+            <p>Sizga yoqqan animelarni yurakcha yoki "+" tugmasi orqali saqlab qo'yishingiz mumkin.</p>
+            <button class="btn btn-primary" onclick="switchTab('catalog')">Katalogga o'tish</button>
+          </div>
+        </section>
+
+        <!-- 6. PROFILIM (PROFILE) -->
+        <section id="tab-profile" class="tab-pane">
+          <div class="profile-page-container">
+            
+            <!-- USER HEADER CARD -->
+            <div class="profile-header-card">
+              <div class="profile-avatar-wrapper">
+                <div class="profile-avatar-circle" id="profileAvatar">
+                  <div class="avatar-ring"></div>
+                  <span class="avatar-initials" id="profileInitials">SD</span>
+                </div>
+              </div>
+              
+              <div class="profile-user-details">
+                <div class="profile-name-row">
+                  <h2 class="profile-name" id="profileFullName">ShoDaShi</h2>
+                  <button class="profile-bell-btn" title="Bildirishnomalar">🔔</button>
+                </div>
+                <div class="profile-username" id="profileUsername">@Shoxrux_Daminov</div>
+                <div class="profile-id-row">
+                  <span class="id-label" id="profileUserId">5199820118</span>
+                  <button class="copy-id-btn" id="copyIdBtn" title="ID nusxalash">
+                    <span class="copy-icon">📋</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- STATUS & BALANCE CARD -->
+            <div class="profile-status-card">
+              <div class="status-left">
+                <div class="plan-badges">
+                  <span class="badge-pill lock">🔒 Bepul</span>
+                  <span class="badge-pill gray">FAOL EMAS</span>
+                </div>
+                <div class="balance-display">
+                  <span class="balance-amount" id="profilePoints">0</span>
+                  <span class="balance-unit">ball</span>
+                </div>
+              </div>
+              <button class="btn-premium-action" id="getPremiumBtn">
+                <span>Premium olish</span>
+                <span class="arrow">➔</span>
+              </button>
+            </div>
+
+            <!-- VERIFY ACCOUNT CARD -->
+            <div class="profile-action-card verify-card" id="verifyAccountCard">
+              <div class="card-icon gold-star">★</div>
+              <div class="card-info">
+                <div class="card-title">Akkauntni tasdiqlash</div>
+                <div class="card-sub">Ijodkor yoki ovoz aktyor sifatida ariza yuborish</div>
+              </div>
+              <span class="chevron">›</span>
+            </div>
+
+            <!-- ASOSIY BO'LIM -->
+            <div class="profile-group-label">ASOSIY</div>
+            <div class="profile-menu-card">
+              <button class="menu-item-row" id="menuPremiumSub">
+                <div class="menu-item-left">
+                  <span class="item-icon">👑</span>
+                  <span class="item-text">Premium obuna</span>
+                </div>
+                <span class="chevron">›</span>
+              </button>
+              
+              <button class="menu-item-row" onclick="switchTab('favorites')">
+                <div class="menu-item-left">
+                  <span class="item-icon">🔖</span>
+                  <span class="item-text">Saqlangan filmlar</span>
+                </div>
+                <span class="chevron">›</span>
+              </button>
+            </div>
+
+            <!-- XIZMATLAR BO'LIMI -->
+            <div class="profile-group-label">XIZMATLAR</div>
+            <div class="profile-menu-card">
+              <button class="menu-item-row" id="menuPromoCode">
+                <div class="menu-item-left">
+                  <span class="item-icon">🎟</span>
+                  <span class="item-text">Promo-kod</span>
+                </div>
+                <span class="chevron">›</span>
+              </button>
+              
+              <button class="menu-item-row" id="menuRequestFilm">
+                <div class="menu-item-left">
+                  <span class="item-icon">🎬</span>
+                  <span class="item-text">Film so'rash</span>
+                </div>
+                <span class="chevron">›</span>
+              </button>
+
+              <button class="menu-item-row" id="menuSupport">
+                <div class="menu-item-left">
+                  <span class="item-icon">🎧</span>
+                  <span class="item-text">Qo'llab-quvvatlash</span>
+                </div>
+                <span class="chevron">›</span>
+              </button>
+            </div>
+
+            <!-- TOMOSHA TARIXI -->
+            <div class="profile-group-label">🕒 TOMOSHA TARIXI</div>
+            <div class="history-empty-card" id="historyCard">
+              <span class="history-text">Hali tarix bo'sh.</span>
+            </div>
+
+            <!-- LOGOUT BUTTON -->
+            <div class="logout-section">
+              <button class="logout-btn" id="logoutBtn">
+                <span class="logout-icon">🚪</span>
+                <span>Hisobdan chiqish</span>
+              </button>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+
+      <!-- MOBILE BOTTOM NAVIGATION BAR -->
+      <nav class="mobile-bottom-nav">
+        <button class="mob-nav-item active" data-tab="home">
+          <span class="mob-icon">🏠</span>
+          <span class="mob-label">Asosiy</span>
+        </button>
+        <button class="mob-nav-item" data-tab="catalog">
+          <span class="mob-icon">🔍</span>
+          <span class="mob-label">Katalog</span>
+        </button>
+        <button class="mob-nav-item" data-tab="reels">
+          <span class="mob-icon">🔥</span>
+          <span class="mob-label">Lenta</span>
+        </button>
+        <button class="mob-nav-item" data-tab="chat">
+          <span class="mob-icon">💬</span>
+          <span class="mob-label">Chat</span>
+        </button>
+        <button class="mob-nav-item" data-tab="profile">
+          <span class="mob-icon">👤</span>
+          <span class="mob-label">Profilim</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <!-- ANIME DETAIL & EPISODES MODAL -->
+  <div class="modal-backdrop" id="animeDetailModal" style="display: none;">
+    <div class="modal-box anime-modal">
+      <button class="modal-close-btn" id="closeDetailModalBtn">✕</button>
+      
+      <div class="modal-header-hero">
+        <img src="" alt="" id="modalAnimeCover" class="modal-hero-img">
+        <div class="modal-hero-gradient"></div>
+        <div class="modal-hero-content">
+          <div class="modal-tags-row">
+            <span class="badge-status" id="modalAnimeStatus">Tugallangan</span>
+            <span class="badge-rating" id="modalAnimeRating">⭐ 5.0</span>
+            <span class="badge-code" id="modalAnimeCode">#CODE</span>
+          </div>
+          <h2 class="modal-title" id="modalAnimeTitle">Anime nomi</h2>
+          <p class="modal-genres" id="modalAnimeGenres">Janrlar</p>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-meta-row">
+          <div class="meta-item">
+            <span class="meta-label">Tarjima</span>
+            <span class="meta-val" id="modalAnimeTranslation">O'zbekcha</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Qismlar</span>
+            <span class="meta-val" id="modalAnimeEpisodesCount">12 qism</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Ko'rishlar</span>
+            <span class="meta-val" id="modalAnimeViews">0</span>
+          </div>
+        </div>
+
+        <div class="modal-desc-box">
+          <h4>Tavsif:</h4>
+          <p id="modalAnimeDesc">Anime tavsifi...</p>
+        </div>
+
+        <!-- EPISODES LIST -->
+        <div class="episodes-section">
+          <div class="episodes-header">
+            <h4>Qismlar ro'yxati:</h4>
+            <span class="badge-pill gray" id="episodesCountPill">12 qism</span>
+          </div>
+          <div class="episodes-grid" id="modalEpisodesGrid">
+            <!-- Dynamically populated buttons -->
+          </div>
+        </div>
+
+        <div class="modal-bottom-actions">
+          <button class="btn btn-primary full-width" id="modalWatchFirstBtn">
+            ▶ 1-qismni tomosha qilish
+          </button>
+          <button class="btn btn-secondary full-width" id="modalToggleFavBtn">
+            ❤️ Sevimlilarga qo'shish
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROMO-CODE MODAL -->
+  <div class="modal-backdrop" id="promoModal" style="display: none;">
+    <div class="modal-box form-modal">
+      <button class="modal-close-btn" onclick="closeModal('promoModal')">✕</button>
+      <div class="modal-icon-top">🎟</div>
+      <h3>Promo-kod kiritish</h3>
+      <p class="modal-hint">Maxsus promo-kodni kiritib bepul ball yoki VIP obunaga ega bo'ling!</p>
+      
+      <div class="input-field-wrap">
+        <input type="text" id="promoCodeInput" placeholder="Masalan: ANIME2026" uppercase>
+      </div>
+
+      <button class="btn btn-primary full-width" id="submitPromoBtn">Faollashtirish</button>
+    </div>
+  </div>
+
+  <!-- FILM REQUEST MODAL -->
+  <div class="modal-backdrop" id="filmRequestModal" style="display: none;">
+    <div class="modal-box form-modal">
+      <button class="modal-close-btn" onclick="closeModal('filmRequestModal')">✕</button>
+      <div class="modal-icon-top">🎬</div>
+      <h3>Film yoki Anime so'rash</h3>
+      <p class="modal-hint">Botga yoki ilovaga qo'shilishini xohlagan animengiz nomini yozib qoldiring:</p>
+      
+      <div class="input-field-wrap">
+        <input type="text" id="filmRequestInput" placeholder="Anime yoki serial nomi...">
+      </div>
+
+      <button class="btn btn-primary full-width" id="submitFilmRequestBtn">Yuborish</button>
+    </div>
+  </div>
+
+  <!-- VERIFICATION MODAL -->
+  <div class="modal-backdrop" id="verifyModal" style="display: none;">
+    <div class="modal-box form-modal">
+      <button class="modal-close-btn" onclick="closeModal('verifyModal')">✕</button>
+      <div class="modal-icon-top">★</div>
+      <h3>Ijodkor sifatida ariza</h3>
+      <p class="modal-hint">Ovoz aktyori, tarjimon yoki dublyaj jamoasi sifatida ro'yxatdan o'tmoqchimisiz?</p>
+      
+      <div class="input-field-wrap">
+        <textarea id="verifyNoteInput" rows="3" placeholder="O'zingiz yoki jamoangiz haqida qisqacha ma'lumot..."></textarea>
+      </div>
+
+      <button class="btn btn-primary full-width" id="submitVerifyBtn">Arizani yuborish</button>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast-notification" id="toastBox">
+    <span class="toast-msg" id="toastMsg">Xabar</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
