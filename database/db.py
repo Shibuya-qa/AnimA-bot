@@ -1,4 +1,6 @@
 import aiosqlite
+import re
+import difflib
 from config import DB_PATH
 
 
@@ -127,6 +129,50 @@ async def init_db():
 
 
 # ─── ANIME ───────────────────────────────────────────────────────────────────
+
+def clean_anime_title(s: str) -> str:
+    s = s.lower()
+    s = re.sub(r'\[\s*\d+\s*[-_]?\s*qism\s*\]|\d+\s*[-_]?\s*qism|qism\s*[:\-]?\s*\d+', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'[^a-z0-9\s\u0400-\u04FF\']', ' ', s)
+    return " ".join(s.split())
+
+
+async def find_anime_by_name_fuzzy(title: str) -> dict | None:
+    """Find the best matching anime by name using string similarity."""
+    clean_target = clean_anime_title(title)
+    if not clean_target:
+        return None
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM animes") as cur:
+            all_animes = [dict(r) for r in await cur.fetchall()]
+
+    best_match = None
+    best_score = 0.0
+
+    for a in all_animes:
+        clean_db = clean_anime_title(a["name"])
+        if not clean_db:
+            continue
+        if clean_db == clean_target:
+            return a
+        if clean_db in clean_target or clean_target in clean_db:
+            score = 0.95
+        else:
+            ratio = difflib.SequenceMatcher(None, clean_target, clean_db).ratio()
+            w1, w2 = set(clean_target.split()), set(clean_db.split())
+            overlap = len(w1 & w2) / max(len(w1), len(w2)) if w1 and w2 else 0
+            score = max(ratio, overlap)
+
+        if score > best_score:
+            best_score = score
+            best_match = a
+
+    if best_match and best_score >= 0.70:
+        return best_match
+    return None
+
 
 async def get_anime_by_code(code: str) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
