@@ -1,9 +1,10 @@
 import os
 import re
+import html
+import logging
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputTextMessageContent
 from aiogram.filters import Command, CommandObject
-import logging
 
 from database.db import (
     get_anime_by_code, get_anime_by_id, get_animes_by_name,
@@ -28,7 +29,7 @@ log = logging.getLogger(__name__)
 IGNORED_TEXTS = {
     "🔍 Qidirish", "🔍 Anime Izlash", "🔥 Top Animelar", "🎲 Random Anime",
     "🗂 Kabinet", "👑 Admin Panel", "Admin Panel", "📖 Qo'llanma",
-    "📢 Reklama", "📱 Shorts", "admin", "panel"
+    "📢 Reklama", "📱 Shorts", "admin", "panel", "📱 Mini Appni ochish"
 }
 
 
@@ -42,23 +43,29 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
     rating = anime.get("rating", 5.0) or 5.0
     rating_count = anime.get("rating_count", 0) or 0
 
+    name_escaped = html.escape(str(anime.get("name", "Noma'lum")))
+    code_escaped = html.escape(str(anime.get("code", "")))
+    status_escaped = html.escape(str(status))
+
     if status == "Tugallangan":
         ep_line = f"├‣ 📺 Qismlar: <b>{total_ep} ta</b>"
     else:
         ep_line = f"├‣ 📺 Qismlar: <b>{curr_total}/{total_ep}</b>"
 
     lines = [
-        f"🎬 <b>{anime['name']}</b>",
+        f"🎬 <b>{name_escaped}</b>",
         "╭────────────────────────────",
-        f"├‣ 🔑 Kod: <code>{anime['code']}</code>",
-        f"├‣ {status_emoji} Holati: <b>{status}</b>",
+        f"├‣ 🔑 Kod: <code>{code_escaped}</code>",
+        f"├‣ {status_emoji} Holati: <b>{status_escaped}</b>",
         ep_line,
         f"├‣ 📀 Tanlangan: <b>{current_ep_num}-qism</b>",
     ]
     if anime.get("translation"):
-        lines.append(f"├‣ 🌐 Tarjima: <b>{anime['translation']}</b>")
+        trans_escaped = html.escape(str(anime["translation"]))
+        lines.append(f"├‣ 🌐 Tarjima: <b>{trans_escaped}</b>")
     if anime.get("genres"):
-        lines.append(f"├‣ 🎭 Janrlar: <i>{anime['genres']}</i>")
+        genres_escaped = html.escape(str(anime["genres"]))
+        lines.append(f"├‣ 🎭 Janrlar: <i>{genres_escaped}</i>")
 
     lines.append("├────────────────────────────")
     stars = "⭐" * int(min(5, max(1, round(rating))))
@@ -67,7 +74,8 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
     lines.append("╰────────────────────────────")
 
     if anime.get("description"):
-        lines.append(f"\n📖 <b>Tavsif:</b>\n<i>{anime['description']}</i>")
+        desc_escaped = html.escape(str(anime["description"]))
+        lines.append(f"\n📖 <b>Tavsif:</b>\n<i>{desc_escaped}</i>")
     return "\n".join(lines)
 
 
@@ -104,7 +112,9 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
         except Exception as e:
             log.error(f"[ANIME] auto-link failed: {e}")
 
-    caption_text = f"🎬 <b>{anime['name']}</b> — {ep_num}-qism\n🔑 Kod: <code>{anime['code']}</code>"
+    anime_name_esc = html.escape(str(anime.get("name", "")))
+    anime_code_esc = html.escape(str(anime.get("code", "")))
+    caption_text = f"🎬 <b>{anime_name_esc}</b> — {ep_num}-qism\n🔑 Kod: <code>{anime_code_esc}</code>"
 
     if file_id:
         try:
@@ -139,7 +149,7 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
             log.error(f"[ANIME] copy_message failed: {e}")
             await bot.send_message(
                 chat_id=chat_id,
-                text=f"⚠️ <b>Video yuborishda xato!</b>\n<code>{e}</code>",
+                text=f"⚠️ <b>Video yuborishda xato!</b>\n<code>{html.escape(str(e))}</code>",
                 parse_mode="HTML"
             )
             return
@@ -149,7 +159,6 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
         text=f"⏳ <b>{ep_num}-qism videosi hali yuklanmagan.</b>",
         parse_mode="HTML"
     )
-
 
 
 async def get_all_available_episodes(anime: dict) -> list[int]:
@@ -195,7 +204,6 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
     elif available_eps and ep_num not in available_eps:
         ep_num = available_eps[0]
 
-
     caption = format_anime_card(anime, ep_num)
     kb = anime_actions(
         anime_id=anime["id"],
@@ -211,15 +219,21 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
 
     await add_history(user_id, anime["id"])
 
-    # Send info card
+    # Send info card safely
+    sent_card = False
     if anime.get("thumbnail_file_id"):
-        await message.answer_photo(
-            photo=anime["thumbnail_file_id"],
-            caption=caption,
-            parse_mode="HTML",
-            reply_markup=kb
-        )
-    else:
+        try:
+            await message.answer_photo(
+                photo=anime["thumbnail_file_id"],
+                caption=caption,
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+            sent_card = True
+        except Exception as e:
+            log.warning(f"[ANIME] answer_photo failed: {e}")
+
+    if not sent_card:
         await message.answer(caption, parse_mode="HTML", reply_markup=kb)
 
     # Deliver video for selected episode
@@ -342,7 +356,7 @@ async def download_all_handler(callback: CallbackQuery):
     await callback.answer(f"📦 Barcha {len(all_ep_nums)} ta qism yuborilmoqda...")
 
     notif = await callback.message.answer(
-        f"⏳ <b>{anime['name']}</b> — barcha {len(all_ep_nums)} ta qism yuborilmoqda, kuting...",
+        f"⏳ <b>{html.escape(anime['name'])}</b> — barcha {len(all_ep_nums)} ta qism yuborilmoqda, kuting...",
         parse_mode="HTML"
     )
 
@@ -354,7 +368,6 @@ async def download_all_handler(callback: CallbackQuery):
         await notif.delete()
     except Exception:
         pass
-
 
 
 # ─── RATINGS ─────────────────────────────────────────────────────────────────
@@ -485,7 +498,8 @@ async def genre_animes_handler(callback: CallbackQuery):
 
     page = offset // 8 + 1
     total_pages = (total + 7) // 8
-    text = f"🎭 <b>{genre}</b> janridagi animelar — {page}/{total_pages} sahifa (jami {total} ta):"
+    genre_esc = html.escape(genre)
+    text = f"🎭 <b>{genre_esc}</b> janridagi animelar — {page}/{total_pages} sahifa (jami {total} ta):"
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
@@ -575,8 +589,6 @@ async def search_or_code_handler(message: Message, command: CommandObject = None
         query = raw_text
 
         # Strip bot username mention if present:
-        # e.g. "@animafundubbot Naruto" -> "Naruto"
-        # e.g. "Naruto @animafundubbot" -> "Naruto"
         if bot_username:
             query = re.sub(rf"@{bot_username}\b", "", query, flags=re.IGNORECASE).strip()
             query = query.lstrip(":,; -").strip()
@@ -606,23 +618,25 @@ async def search_or_code_handler(message: Message, command: CommandObject = None
         await deliver_anime(message, results[0])
         return
     elif len(results) > 1:
+        query_esc = html.escape(query)
         text = (
-            f"🔍 <b>«{query}»</b> so'rovi bo'yicha {len(results)} ta natija topildi:\n\n"
+            f"🔍 <b>«{query_esc}»</b> so'rovi bo'yicha {len(results)} ta natija topildi:\n\n"
             f"Ko'rmoqchi bo'lgan animengizni tanlang:"
         )
         await message.answer(text, parse_mode="HTML", reply_markup=search_results_keyboard(results))
         return
 
     # 3. No match found
+    query_esc = html.escape(query)
     if message.chat.type in ("group", "supergroup"):
         await message.answer(
-            f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
+            f"❌ <b>«{query_esc}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
             f"💡 Anime nomi yoki kodini to'g'ri yozganingizni tekshiring.",
             parse_mode="HTML"
         )
     else:
         await message.answer(
-            f"❌ <b>«{query}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
+            f"❌ <b>«{query_esc}»</b> bo'yicha hech qanday anime topilmadi.\n\n"
             f"💡 Qidiruvda xatolik bo'lmasligi uchun anime nomini yoki kodini tekshiring, yoki katalogdan qidiring.",
             parse_mode="HTML",
             reply_markup=search_menu()
@@ -684,11 +698,14 @@ async def inline_search_handler(inline_query: InlineQuery):
         desc = f"{status_icon} Kod: {anime['code']} | 👁 {views:,} | ⭐ {rating:.1f}"
 
         deep_link = f"https://t.me/{bot_info.username}?start={anime['code']}"
+        name_esc = html.escape(str(anime.get('name', '')))
+        code_esc = html.escape(str(anime.get('code', '')))
+        status_esc = html.escape(str(anime.get('status', '')))
         text = (
-            f"🎬 <b>{anime['name']}</b>\n"
+            f"🎬 <b>{name_esc}</b>\n"
             f"╭────────────────────────────\n"
-            f"├‣ 🔑 Kod: <code>{anime['code']}</code>\n"
-            f"├‣ {status_icon} Status: {anime['status']}\n"
+            f"├‣ 🔑 Kod: <code>{code_esc}</code>\n"
+            f"├‣ {status_icon} Status: {status_esc}\n"
             f"├‣ 👁 Ko'rishlar: {views:,} | ⭐ Reyting: {rating:.1f}\n"
             f"╰────────────────────────────\n\n"
             f"👉 <a href='{deep_link}'>Botda tomosha qilish va yuklab olish</a>"

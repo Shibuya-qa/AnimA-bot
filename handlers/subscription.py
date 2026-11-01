@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery
 from database.db import get_sub_channels as get_channels
 from middlewares.subscription import check_subscription, subscribe_keyboard
 from keyboards.main import main_menu
+from handlers.admin import check_admin
 
 router = Router()
 
@@ -31,9 +32,10 @@ async def check_sub_handler(callback: CallbackQuery):
                 parse_mode="HTML"
             )
         else:
+            is_adm = await check_admin(callback.from_user.id)
             await callback.message.answer(
                 "✅ <b>Rahmat! Endi botdan foydalanishingiz mumkin.</b>",
                 parse_mode="HTML",
-                reply_markup=main_menu()
+                reply_markup=main_menu(is_admin=is_adm)
             )
         await callback.answer("✅ Tabriklaymiz!")

@@ -1,8 +1,6 @@
-
 import os
 import re
 import logging
-# pyrefly: ignore[missing-import]
 from aiogram import Router
 from aiogram.types import Message
 from database.db import set_source_message_id, get_anime_by_code, add_episode
@@ -32,6 +30,7 @@ async def channel_post_indexer(message: Message):
     
     anime = None
     code = ""
+    raw_code = ""
     ep_num = None
 
     if not match:
@@ -54,7 +53,7 @@ async def channel_post_indexer(message: Message):
         code = raw_code
 
     # If code not found directly, try splitting prefix or dash (e.g. sjs9 -> sjs + ep 9, or n2 -> n1 + ep 2)
-    if not anime:
+    if not anime and raw_code:
         if "-" in raw_code:
             parts = raw_code.rsplit("-", 1)
             if parts[1].isdigit():
@@ -80,11 +79,13 @@ async def channel_post_indexer(message: Message):
         if ep_num is None:
             if anime.get("current_episode") and anime["current_episode"] > 0:
                 ep_num = anime["current_episode"]
-            else:
+            elif raw_code:
                 digit_match = re.search(r"(\d+)$", raw_code)
                 ep_num = int(digit_match.group(1)) if digit_match else 1
+            else:
+                ep_num = 1
 
-        video_file_id = message.video.file_id if message.video else ""
+        video_file_id = message.video.file_id if message.video else (message.document.file_id if message.document else "")
         await add_episode(
             anime["id"],
             episode_number=ep_num,
@@ -94,4 +95,4 @@ async def channel_post_indexer(message: Message):
         await set_source_message_id(anime["code"], message.message_id)
         log.info(f"[CHANNEL] indexed: anime={anime['name']} code={code} ep={ep_num} message_id={message.message_id} video={'YES' if video_file_id else 'NO'}")
     else:
-        log.warning(f"[CHANNEL] code={raw_code!r} not found in DB")
+        log.warning(f"[CHANNEL] code={raw_code or code!r} not found in DB")

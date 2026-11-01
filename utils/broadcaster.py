@@ -1,14 +1,12 @@
-import re
-from aiogram import Bot
-from config import SOURCE_CHANNEL_ID
-from database.db import get_broadcast_channels
-
-
 import os
+import re
+import html
 import asyncio
 import logging
-from config import ADMIN_IDS
-from database.db import add_episode, set_source_message_id
+import sqlite3
+from aiogram import Bot
+from config import SOURCE_CHANNEL_ID, ADMIN_IDS, DB_PATH
+from database.db import get_broadcast_channels, add_episode, set_source_message_id
 
 log = logging.getLogger(__name__)
 
@@ -24,19 +22,17 @@ async def search_and_link_channel_post(bot: Bot, anime: dict, ep_num: int = 1) -
     if not src_channel or not ADMIN_IDS:
         return None
 
+    from_chat = int(src_channel) if str(src_channel).lstrip("-").isdigit() else src_channel
     admin_id = ADMIN_IDS[0]
     code = anime.get("code", "").strip().lower()
     if not code:
         return None
 
-    import sqlite3
-    from config import DB_PATH
     try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-        res = cur.execute("SELECT MAX(source_message_id) FROM anime_episodes").fetchone()
-        max_id = (res[0] or 650) if res else 650
-        con.close()
+        with sqlite3.connect(DB_PATH) as con:
+            cur = con.cursor()
+            res = cur.execute("SELECT MAX(source_message_id) FROM anime_episodes").fetchone()
+            max_id = (res[0] or 650) if res else 650
     except Exception:
         max_id = 650
 
@@ -49,7 +45,7 @@ async def search_and_link_channel_post(bot: Bot, anime: dict, ep_num: int = 1) -
         try:
             fwd = await bot.forward_message(
                 chat_id=admin_id,
-                from_chat_id=src_channel,
+                from_chat_id=from_chat,
                 message_id=msg_id,
                 disable_notification=True
             )
@@ -84,19 +80,25 @@ def format_broadcast_caption(anime: dict) -> str:
     else:
         ep_line = f"├‣ Anime: {current_ep}/{total_ep} qism"
 
+    name_esc = html.escape(str(anime.get("name", "")))
+    status_esc = html.escape(str(status))
+
     lines = [
-        f"<b>{anime['name']}</b>",
+        f"<b>{name_esc}</b>",
         "╭──────────────────────",
-        f"├‣ Status: {status}",
+        f"├‣ Status: {status_esc}",
         ep_line,
     ]
     if anime.get("translation"):
-        lines.append(f"├‣ Translation: {anime['translation']}")
+        trans_esc = html.escape(str(anime["translation"]))
+        lines.append(f"├‣ Translation: {trans_esc}")
     if anime.get("genres"):
-        lines.append(f"├‣ Genres: {anime['genres']}")
+        genres_esc = html.escape(str(anime["genres"]))
+        lines.append(f"├‣ Genres: {genres_esc}")
     lines.append("╰──────────────────────")
     if anime.get("description"):
-        lines.append(f"\n📄 {anime['description']}")
+        desc_esc = html.escape(str(anime["description"]))
+        lines.append(f"\n📄 {desc_esc}")
     return "\n".join(lines)
 
 

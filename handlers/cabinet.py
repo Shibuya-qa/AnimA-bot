@@ -1,3 +1,4 @@
+import html
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -10,11 +11,13 @@ router = Router()
 
 @router.message(F.text == "🗂 Kabinet")
 async def cabinet_handler(message: Message):
+    full_name = html.escape(message.from_user.full_name or "Foydalanuvchi")
+    username = message.from_user.username or "yo'q"
     text = (
         f"🗂 <b>Foydalanuvchi Kabineti</b>\n\n"
-        f"👤 <b>{message.from_user.full_name}</b>\n"
+        f"👤 <b>{full_name}</b>\n"
         f"🆔 ID: <code>{message.from_user.id}</code>\n"
-        f"🔗 Username: @{message.from_user.username or 'yo\'q'}\n\n"
+        f"🔗 Username: @{username}\n\n"
         f"✨ Kerakli bo'limni tanlang:"
     )
     await message.answer(text, parse_mode="HTML", reply_markup=cabinet_menu())
@@ -66,10 +69,11 @@ async def favorites_handler(callback: CallbackQuery):
 
 @router.callback_query(F.data == "cabinet:back")
 async def cabinet_back(callback: CallbackQuery):
+    full_name = html.escape(callback.from_user.full_name or "Foydalanuvchi")
     username = callback.from_user.username or "yo'q"
     text = (
         f"🗂 <b>Foydalanuvchi Kabineti</b>\n\n"
-        f"👤 <b>{callback.from_user.full_name}</b>\n"
+        f"👤 <b>{full_name}</b>\n"
         f"🆔 ID: <code>{callback.from_user.id}</code>\n"
         f"🔗 Username: @{username}\n\n"
         f"✨ Kerakli bo'limni tanlang:"

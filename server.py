@@ -256,9 +256,18 @@ def create_app():
     app.router.add_post("/api/user/{user_id}/favorites", toggle_favorite)
     app.router.add_post("/api/user/{user_id}/history", add_history)
 
+    # Root index.html handler
+    async def index_handler(request):
+        index_file = os.path.join(WEBAPP_DIR, "index.html")
+        if os.path.exists(index_file):
+            return web.FileResponse(index_file)
+        return web.Response(text="ShoDa Anime Mini App")
+
+    app.router.add_get("/", index_handler)
+
     # Static WebApp UI
     if os.path.exists(WEBAPP_DIR):
-        app.router.add_static("/", WEBAPP_DIR, show_index=True)
+        app.router.add_static("/", WEBAPP_DIR, show_index=False)
 
     return app
 
@@ -267,9 +276,14 @@ async def run_server(host="0.0.0.0", port=8080):
     app = create_app()
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-    print(f"[OK] ShoDa Mini App Server ishga tushdi: http://localhost:{port}")
+    try:
+        site = web.TCPSite(runner, host, port)
+        await site.start()
+        print(f"[OK] ShoDa Mini App Server ishga tushdi: http://localhost:{port}")
+    except OSError as e:
+        print(f"[WARN] Mini App port {port} ishga tushmadi: {e}")
+        return
+
     while True:
         await asyncio.sleep(3600)
 

@@ -1,3 +1,4 @@
+import html
 from typing import Callable, Awaitable, Any
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
@@ -46,10 +47,14 @@ class SubscriptionMiddleware(BaseMiddleware):
         bot = data["bot"]
 
         if isinstance(event, Message):
+            if not event.from_user:
+                return await handler(event, data)
             user_id = event.from_user.id
         elif isinstance(event, CallbackQuery):
             # always allow subscription check callback
             if event.data == "check_subscription":
+                return await handler(event, data)
+            if not event.from_user:
                 return await handler(event, data)
             user_id = event.from_user.id
         else:
@@ -68,7 +73,8 @@ class SubscriptionMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         user = event.from_user
-        mention = f"@{user.username}" if user.username else f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
+        escaped_name = html.escape(user.full_name or "Foydalanuvchi")
+        mention = f"@{user.username}" if user.username else f"<a href='tg://user?id={user.id}'>{escaped_name}</a>"
         text = (
             f"⚠️ <b>{mention}</b>, botdan foydalanish uchun quyidagi kanallarga obuna bo'ling:\n\n"
             + "\n".join(f"• {ch['channel_name']}" for ch in not_subscribed)
@@ -79,5 +85,6 @@ class SubscriptionMiddleware(BaseMiddleware):
             await event.answer(text, parse_mode="HTML", reply_markup=kb)
         elif isinstance(event, CallbackQuery):
             await event.answer("⚠️ Avval kanallarga obuna bo'ling!", show_alert=True)
-            await event.message.answer(text, parse_mode="HTML", reply_markup=kb)
+            if event.message:
+                await event.message.answer(text, parse_mode="HTML", reply_markup=kb)
         return

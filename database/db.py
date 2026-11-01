@@ -172,6 +172,10 @@ async def set_source_message_id(code: str, message_id: int):
 
 async def delete_anime(anime_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM anime_episodes WHERE anime_id = ?", (anime_id,))
+        await db.execute("DELETE FROM anime_ratings WHERE anime_id = ?", (anime_id,))
+        await db.execute("DELETE FROM favorites WHERE anime_id = ?", (anime_id,))
+        await db.execute("DELETE FROM user_history WHERE anime_id = ?", (anime_id,))
         await db.execute("DELETE FROM animes WHERE id = ?", (anime_id,))
         await db.commit()
 
@@ -401,8 +405,11 @@ async def get_active_users_stats() -> dict:
 async def add_episode(anime_id: int, episode_number: int, file_id: str = "", source_message_id: int = 0) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT OR REPLACE INTO anime_episodes (anime_id, episode_number, file_id, source_message_id)
-               VALUES (?, ?, ?, ?)""",
+            """INSERT INTO anime_episodes (anime_id, episode_number, file_id, source_message_id)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(anime_id, episode_number) DO UPDATE SET
+               file_id = CASE WHEN excluded.file_id != '' THEN excluded.file_id ELSE anime_episodes.file_id END,
+               source_message_id = CASE WHEN excluded.source_message_id > 0 THEN excluded.source_message_id ELSE anime_episodes.source_message_id END""",
             (anime_id, episode_number, file_id, source_message_id)
         )
         # Update current_episode in animes table if needed

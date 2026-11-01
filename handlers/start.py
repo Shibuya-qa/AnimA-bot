@@ -1,3 +1,4 @@
+import html
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart, CommandObject
@@ -7,8 +8,6 @@ from keyboards.main import main_menu, cabinet_menu
 from handlers.admin import check_admin
 
 router = Router()
-
-WELCOME_GIF = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcWd5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5ZzZ5Zz/giphy.gif"
 
 WELCOME_TEXT = (
     "👋 <b>Assalomu alaykum, anime ixlosmandi!</b>\n\n"
@@ -42,17 +41,8 @@ async def start_handler(message: Message, command: CommandObject = None):
     is_adm = await check_admin(message.from_user.id)
     kb = None if message.chat.type in ("group", "supergroup") else main_menu(is_admin=is_adm)
 
-    try:
-        await message.answer_animation(
-            animation=WELCOME_GIF,
-            caption=WELCOME_TEXT,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-    except Exception:
-        await message.answer(
-            text=WELCOME_TEXT,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-
+    await message.answer(
+        text=WELCOME_TEXT,
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
