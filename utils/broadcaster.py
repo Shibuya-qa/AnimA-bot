@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from aiogram import Bot
 from config import SOURCE_CHANNEL_ID, ADMIN_IDS, DB_PATH
-from database.db import get_broadcast_channels, add_episode, set_source_message_id
+from database.db import get_broadcast_channels, add_episode, set_source_message_id, find_anime_by_name_fuzzy, clean_anime_title
 
 log = logging.getLogger(__name__)
 
@@ -53,7 +53,13 @@ async def search_and_link_channel_post(bot: Bot, anime: dict, ep_num: int = 1) -
             video_file_id = fwd.video.file_id if fwd.video else ""
             await bot.delete_message(chat_id=admin_id, message_id=fwd.message_id)
 
-            if code_regex.search(text) or (code in text.lower() and anime.get("name", "").lower() in text.lower()):
+            # Match by code regex, exact name, or fuzzy name similarity
+            name_match = False
+            if text.strip():
+                fuzzy_result = await find_anime_by_name_fuzzy(text)
+                if fuzzy_result and fuzzy_result.get("code", "").strip().lower() == code:
+                    name_match = True
+            if code_regex.search(text) or name_match:
                 await add_episode(
                     anime_id=anime["id"],
                     episode_number=ep_num,
