@@ -58,8 +58,11 @@ def format_anime_card(anime: dict, current_ep_num: int = 1) -> str:
         f"├‣ 🔑 Kod: <code>{code_escaped}</code>",
         f"├‣ {status_emoji} Holati: <b>{status_escaped}</b>",
         ep_line,
-        f"├‣ 📀 Tanlangan: <b>{current_ep_num}-qism</b>",
     ]
+    if current_ep_num:
+        lines.append(f"├‣ 📀 Tanlangan: <b>{current_ep_num}-qism</b>")
+    else:
+        lines.append("├‣ 📀 Qismlar: <i>Hali yuklanmagan</i>")
     if anime.get("translation"):
         trans_escaped = html.escape(str(anime["translation"]))
         lines.append(f"├‣ 🌐 Tarjima: <b>{trans_escaped}</b>")
@@ -162,20 +165,28 @@ async def send_episode_video(bot, chat_id: int, anime: dict, ep_num: int):
 
 
 async def get_all_available_episodes(anime: dict) -> list[int]:
-    """Get all available episode numbers for an anime and its siblings."""
+    """Get all available episode numbers for an anime and its siblings that have video."""
     episodes = await get_episodes(anime["id"])
     siblings = await get_animes_by_name(anime["name"])
-    sibling_ep_map = {}
+    available_eps = set()
+
+    for ep in episodes:
+        if (ep.get("file_id") and ep["file_id"].strip()) or (ep.get("source_message_id") and ep["source_message_id"] > 0):
+            available_eps.add(ep["episode_number"])
+
     for sib in siblings:
         sib_eps = await get_episodes(sib["id"])
         for ep in sib_eps:
-            en = ep["episode_number"]
-            if en not in sibling_ep_map or (not sibling_ep_map[en].get("file_id") and ep.get("file_id")):
-                sibling_ep_map[en] = ep
+            if (ep.get("file_id") and ep["file_id"].strip()) or (ep.get("source_message_id") and ep["source_message_id"] > 0):
+                available_eps.add(ep["episode_number"])
+        if sib.get("source_message_id") and sib["source_message_id"] > 0:
+            sib_curr = sib.get("current_episode") or 1
+            available_eps.add(sib_curr)
 
-    primary_map = {ep["episode_number"]: ep for ep in episodes}
-    merged_map = {**sibling_ep_map, **primary_map}
-    return sorted(merged_map.keys())
+    if anime.get("source_message_id") and anime["source_message_id"] > 0:
+        available_eps.add(anime.get("current_episode") or 1)
+
+    return sorted(list(available_eps))
 
 
 async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page: int = 0, user_id: int = None):
@@ -192,23 +203,23 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
     # Get episodes from this anime AND all sibling animes with same name
     available_eps = await get_all_available_episodes(anime)
 
-    if ep_num is None:
-        curr = anime.get("current_episode", 1)
-        if available_eps:
+    if available_eps:
+        if ep_num is None:
+            curr = anime.get("current_episode", 1)
             if curr in available_eps:
                 ep_num = curr
             else:
                 ep_num = available_eps[0]
-        else:
-            ep_num = curr or 1
-    elif available_eps and ep_num not in available_eps:
-        ep_num = available_eps[0]
+        elif ep_num not in available_eps:
+            ep_num = available_eps[0]
+    else:
+        ep_num = None
 
     caption = format_anime_card(anime, ep_num)
     kb = anime_actions(
         anime_id=anime["id"],
         is_fav=is_fav,
-        active_ep=ep_num,
+        active_ep=ep_num or 1,
         available_episodes=available_eps,
         total_episodes=anime.get("total_episodes", 1),
         current_episode=anime.get("current_episode", 1),
@@ -237,7 +248,10 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
         await message.answer(caption, parse_mode="HTML", reply_markup=kb)
 
     # Deliver video for selected episode
-    await send_episode_video(message.bot, message.chat.id, anime, ep_num)
+    if ep_num is not None:
+        await send_episode_video(message.bot, message.chat.id, anime, ep_num)
+    else:
+        await message.answer("⏳ <b>Ushbu anime qismlari hali yuklanmagan.</b>", parse_mode="HTML")
 
 
 # ─── EPISODE CALLBACK ────────────────────────────────────────────────────────

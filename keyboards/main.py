@@ -131,80 +131,48 @@ def anime_actions(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    # Determine episode numbers to show
-    if available_episodes:
-        all_eps = sorted(available_episodes)
-    else:
-        curr = current_episode if current_episode and current_episode > 0 else 1
-        tot = total_episodes if total_episodes and total_episodes > 0 else 1
+    # Faqat bazada haqiqatda mavjud bo'lgan qismlar uchun tugmalar chiqaramiz
+    all_eps = sorted([ep for ep in (available_episodes or []) if ep > 0])
 
-        if status == "Davom etmoqda":
-            max_ep = max(curr, active_ep, 1)
-        elif status == "Tugallangan":
-            max_ep = max(tot, curr, active_ep, 1)
-        else:
-            if curr < tot:
-                max_ep = max(curr, active_ep, 1)
+    if all_eps:
+        # Har sahifada 9 tadan qism (3x3)
+        EPS_PER_PAGE = 9
+        total_pages = (len(all_eps) + EPS_PER_PAGE - 1) // EPS_PER_PAGE
+        page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
+
+        page_eps = all_eps[page * EPS_PER_PAGE : (page + 1) * EPS_PER_PAGE]
+
+        # 3 tadan qilib qism tugmalarini joylashtiramiz
+        row = []
+        for ep in page_eps:
+            if ep == active_ep:
+                btn_text = f"✨ [{ep}] ✨"
             else:
-                max_ep = max(tot, active_ep, 1)
-
-        all_eps = list(range(1, max_ep + 1))
-
-    # Paginate episodes (9 episodes per page)
-    EPS_PER_PAGE = 9
-    total_pages = (len(all_eps) + EPS_PER_PAGE - 1) // EPS_PER_PAGE
-    page = max(0, min(page, total_pages - 1)) if total_pages > 0 else 0
-
-    page_eps = all_eps[page * EPS_PER_PAGE : (page + 1) * EPS_PER_PAGE]
-
-    # Create 3-item rows for episode buttons
-    row = []
-    for ep in page_eps:
-        if ep == active_ep:
-            btn_text = f"✨ [{ep}] ✨"
-        else:
-            btn_text = f"▶️ {ep}"
-        row.append(InlineKeyboardButton(text=btn_text, callback_data=f"ep:{anime_id}:{ep}:{page}"))
-        if len(row) == 3:
+                btn_text = f"▶️ {ep}"
+            row.append(InlineKeyboardButton(text=btn_text, callback_data=f"ep:{anime_id}:{ep}:{page}"))
+            if len(row) == 3:
+                builder.row(*row)
+                row = []
+        if row:
             builder.row(*row)
-            row = []
-    if row:
-        builder.row(*row)
 
-    # Navigation row if pagination needed
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"ep_page:{anime_id}:{active_ep}:{page - 1}"))
-    if total_pages > 1:
-        nav.append(InlineKeyboardButton(text=f"📄 {page + 1}/{total_pages}", callback_data="noop"))
-    if page + 1 < total_pages:
-        nav.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"ep_page:{anime_id}:{active_ep}:{page + 1}"))
-    if nav:
-        builder.row(*nav)
+        # Agar qismlar 9 tadan ko'p bo'lsa, navigatsiya tugmalari (Oldingi / Keyingi)
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"ep_page:{anime_id}:{active_ep}:{page - 1}"))
+        if total_pages > 1:
+            nav.append(InlineKeyboardButton(text=f"📄 {page + 1}/{total_pages}", callback_data="noop"))
+        if page + 1 < total_pages:
+            nav.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"ep_page:{anime_id}:{active_ep}:{page + 1}"))
+        if nav:
+            builder.row(*nav)
 
-    # --- Action buttons ---
-    # Button 1: next episode (if available)
-    next_ep = next((ep for ep in all_eps if ep > active_ep), None)
-    if next_ep is not None:
-        builder.row(
-            InlineKeyboardButton(text=f"⏭ {next_ep}-qism (keyingi)", callback_data=f"download_ep:{anime_id}:{next_ep}"),
-        )
-
-    # Button 2: all episodes
-    if len(all_eps) > 1:
-        builder.row(
-            InlineKeyboardButton(text=f"📦 Barcha qismlarni olish ({len(all_eps)} ta)", callback_data=f"download_all:{anime_id}"),
-        )
-
+    # Faqat Baholash va Sevimlilar tugmalari (barcha boshqa tugmalar o'chirildi)
     fav_text = "❤️ Sevimlilardan o'chirish" if is_fav else "🤍 Sevimlilarga qo'shish"
     builder.row(
         InlineKeyboardButton(text=fav_text, callback_data=f"fav:{anime_id}:{active_ep}:{page}"),
         InlineKeyboardButton(text="⭐ Baholash", callback_data=f"rate_menu:{anime_id}:{active_ep}:{page}"),
     )
-    if anime_code:
-        builder.row(
-            InlineKeyboardButton(text="🚀 Do'stlarga ulashish", switch_inline_query=f"{anime_code}"),
-        )
 
     return builder.as_markup()
 
