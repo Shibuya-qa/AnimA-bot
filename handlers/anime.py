@@ -204,14 +204,11 @@ async def deliver_anime(message: Message, anime: dict, ep_num: int = None, page:
     available_eps = await get_all_available_episodes(anime)
 
     if available_eps:
-        if ep_num is None:
-            curr = anime.get("current_episode", 1)
-            if curr in available_eps:
-                ep_num = curr
-            else:
-                ep_num = available_eps[0]
-        elif ep_num not in available_eps:
-            ep_num = available_eps[0]
+        if ep_num is None or ep_num not in available_eps:
+            # Har doim 1-qismdan (yoki birinchi mavjud qismdan) boshlash
+            ep_num = 1 if 1 in available_eps else available_eps[0]
+        if page == 0 and ep_num in available_eps:
+            page = available_eps.index(ep_num) // 9
     else:
         ep_num = None
 
